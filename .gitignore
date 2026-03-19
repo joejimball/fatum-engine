@@ -1,0 +1,17 @@
+# Build output
+bin/
+obj/
+
+# Visual Studio
+.vs/
+*.user
+*.suo
+
+# Ejecutables y librerías
+*.exe
+*.dll
+*.pdb
+
+# Publicaciones
+publish/
+/packages
