@@ -2,6 +2,8 @@
 
 A Randonautica-style app that generates random coordinates using Kernel Density Estimation (KDE) to suggest points of interest: **Attractor**, **Void**, or **Power**. It supports generation with PRNG (C# Random) or QRNG (ANU) and is available for Android, iOS, and Windows.
 
+> **Disclaimer (Independent Project):** This repository is an independent, community-driven open source project. It is **not** an official project, product, or endorsement of any third-party app, brand, or company (including "Randonautica").
+
 If you're unfamiliar with Randonauting, the concepts of Probability Blind-Spots and Quantum Randomness, I recommend reading [fatum_theory.txt](https://github.com/anonyhoney/fatum-en/blob/master/docs/fatum_theory.txt) that came with the original Fatum project bot that inspired another well-known commercial randonauting app. If you have no idea what this is about and are completely new to this field, you should read [this article](https://medium.com/swlh/randonauts-how-a-random-number-generator-can-set-you-free-dfc2a2413e15).
 
 ---
