@@ -1,0 +1,32 @@
+@inherits LayoutComponentBase
+@inject ILocalizationService L
+@implements IDisposable
+
+<div class="page">
+    <div class="top-safe-area" aria-hidden="true"></div>
+    <main>
+        <article class="content px-4">
+            @Body
+        </article>
+    </main>
+    <div class="bottom-nav">
+        <NavMenu />
+    </div>
+</div>
+
+@code {
+    protected override void OnInitialized()
+    {
+        L.LanguageChanged += OnLanguageChanged;
+    }
+
+    private void OnLanguageChanged()
+    {
+        InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        L.LanguageChanged -= OnLanguageChanged;
+    }
+}

@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <title>FatumApp.Maui</title>
+    <base href="/" />
+    <link rel="stylesheet" href="lib/leaflet/leaflet.css" />
+    <link rel="stylesheet" href="css/bootstrap/bootstrap.min.css" />
+    <link rel="stylesheet" href="css/app.css" />
+    <link rel="stylesheet" href="FatumApp.Maui.styles.css" />
+    <link rel="icon" href="data:,">
+</head>
+
+<body class="theme-dark">
+
+    <div class="status-bar-safe-area"></div>
+
+    <div id="app" style="background-color: #1a1a2e; color: #e8e8e8; min-height: 100vh; padding: 1rem;">Loading...</div>
+
+    <div id="blazor-error-ui" data-nosnippet>
+        An unhandled error has occurred.
+        <a href="." class="reload">Reload</a>
+        <span class="dismiss">🗙</span>
+    </div>
+
+    <!-- Nota: leaflet.js es grande y no pude vendorearlo automáticamente; mantener CDN temporalmente para no romper la app. -->
+    <script src="lib/leaflet/leaflet.js" crossorigin=""></script>
+    <script src="lib/leaflet/leaflet-heat.js"></script>
+    <script src="js/mappicker.js"></script>
+    <script src="js/heatmap.js"></script>
+    <script src="_framework/blazor.webview.js" autostart="false"></script>
+    <script>
+        // En Android el bridge nativo (window.external.receiveMessage) se inyecta después del script.
+        // Esperamos a que exista antes de llamar a Blazor.start() para evitar "receiveMessage is not a function".
+        (function waitForBridgeAndStart() {
+            var bridgeReady = window.external && typeof window.external.receiveMessage === 'function';
+            var blazorReady = window.Blazor && typeof window.Blazor.start === 'function';
+            if (bridgeReady && blazorReady) {
+                window.Blazor.start();
+                return;
+            }
+            setTimeout(waitForBridgeAndStart, 30);
+        })();
+    </script>
+
+</body>
+
+</html>

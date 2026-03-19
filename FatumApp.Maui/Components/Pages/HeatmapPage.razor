@@ -1,0 +1,148 @@
+@page "/heatmap/{FatumId:long}"
+@using FatumCommon
+@using FatumCommon.Domain
+@using FatumCommon.Helps
+@using FatumApp.Maui.Infrastructure.Data
+@using FatumApp.Maui.Services
+@using FatumCommon.Infrastructure.Data
+@inject IUnitOfWork UnitOfWork
+@inject IKdeCalculator KdeCalculator
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+@inject ILogger<HeatmapPage> Logger
+@inject ILocalizationService L
+@implements IAsyncDisposable
+
+<PageTitle>@L.GetString("Heatmap.Title") - Fatum</PageTitle>
+
+<div class="container p-3">
+    @if (_error != null)
+    {
+        <div class="alert alert-danger">@_error</div>
+        <a href="/history" class="btn btn-outline-primary">@L.GetString("Heatmap.BackToHistory")</a>
+    }
+    else if (_fatum == null)
+    {
+        <p>@L.GetString("Heatmap.Loading")</p>
+    }
+    else
+    {
+        <h1 class="mb-2">@L.GetString("Heatmap.Title")</h1>
+        <p class="text-muted small mb-2">
+            Fatum #@_fatum.Id · @_fatum.CreatedAt.ToLocalTime().ToString("g") · Radio @((_fatum.Radio / 1000.0).ToString("F1")) km · @_fatum.NumPuntos puntos
+        </p>
+        <div class="form-check mb-2">
+            <input type="checkbox" class="form-check-input" id="showPoints" checked="@_showPoints" @onchange="OnPointsVisibilityChanged" />
+            <label class="form-check-label" for="showPoints">@L.GetString("Heatmap.ShowPoints")</label>
+        </div>
+        <div id="heatmap-container" style="height: 450px; width: 100%; border: 1px solid #3d3d5c; border-radius: 8px;"></div>
+        <div class="heatmap-legend mt-2 mb-2">
+            <span class="heatmap-legend-title">@L.GetString("Heatmap.IntensityScale")</span>
+            <div class="heatmap-legend-bar">
+                <span class="heatmap-legend-segment" style="background: #2196F3;" title="@L.GetString("Heatmap.VeryLow")"></span>
+                <span class="heatmap-legend-segment" style="background: #4CAF50;" title="@L.GetString("Heatmap.Low")"></span>
+                <span class="heatmap-legend-segment" style="background: #FFEB3B;" title="@L.GetString("Heatmap.Medium")"></span>
+                <span class="heatmap-legend-segment" style="background: #FF9800;" title="@L.GetString("Heatmap.High")"></span>
+                <span class="heatmap-legend-segment" style="background: #F44336;" title="@L.GetString("Heatmap.VeryHigh")"></span>
+            </div>
+            <div class="heatmap-legend-labels">
+                <span>@L.GetString("Heatmap.VeryLow")</span>
+                <span>@L.GetString("Heatmap.Low")</span>
+                <span>@L.GetString("Heatmap.Medium")</span>
+                <span>@L.GetString("Heatmap.High")</span>
+                <span>@L.GetString("Heatmap.VeryHigh")</span>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter]
+    public long FatumId { get; set; }
+
+    private Fatum? _fatum;
+    private string? _error;
+    private bool _jsInitialized;
+    private bool _showPoints = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _fatum = await UnitOfWork.FatumRepository.GetByIdAsync(FatumId).ConfigureAwait(true);
+        if (_fatum == null)
+            _error = "Fatum no encontrado.";
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender || _fatum == null || _error != null)
+            return;
+        try
+        {
+            var coordList = FatumHelps.GetRandomPoints(_fatum);
+            if (coordList == null || coordList.Count == 0)
+            {
+                _error = "No se pudieron generar los puntos para este Fatum.";
+                StateHasChanged();
+                return;
+            }
+            int gridSize = _fatum.GridSize ?? KdeCalculator.GetGridSize(_fatum.Radio);
+            var bandwidth = _fatum.Bandwidth;
+            var densityGrid = KdeCalculator.CalculateKdeOptimized(coordList, bandwidth, gridSize: gridSize);
+            if (densityGrid == null || densityGrid.Length == 0)
+            {
+                _error = "No se pudo calcular el KDE.";
+                StateHasChanged();
+                return;
+            }
+            var (pngBytes, minLat, maxLat, minLon, maxLon) = HeatmapImageGenerator.Generate(densityGrid, gridSize);
+            var imageDataUrl = "data:image/png;base64," + Convert.ToBase64String(pngBytes);
+            var bounds = new object[] { minLat, minLon, maxLat, maxLon };
+            var pointsArray = coordList.Select(c => new object[] { c.lat, c.lon }).ToArray();
+            var anomalies = (await UnitOfWork.AnomaliaRepository.GetAllAsync().ConfigureAwait(true))
+                .Where(a => a.IdFatum == _fatum.Id)
+                .ToList();
+            var anomalyPoints = anomalies.Select(a => new object[] { a.Latitude, a.Longitude }).ToArray();
+            await JS.InvokeVoidAsync("fatumHeatmap.initWithImage",
+                "heatmap-container",
+                _fatum.Latitude,
+                _fatum.Longitude,
+                imageDataUrl,
+                bounds,
+                pointsArray,
+                _showPoints,
+                anomalyPoints).ConfigureAwait(true);
+            _jsInitialized = true;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error generando mapa de calor KDE");
+            _error = "Error al generar el mapa de calor: " + ex.Message;
+            StateHasChanged();
+        }
+    }
+
+    private async Task OnPointsVisibilityChanged(ChangeEventArgs e)
+    {
+        var show = e.Value is bool b && b;
+        _showPoints = show;
+        try
+        {
+            await JS.InvokeVoidAsync("fatumHeatmap.setPointsVisible", show).ConfigureAwait(true);
+        }
+        catch { /* ignore si el mapa aún no está listo */ }
+        StateHasChanged();
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_jsInitialized)
+        {
+            try
+            {
+                await JS.InvokeVoidAsync("eval", "if (window.fatumHeatmap && window.fatumHeatmap.map) { window.fatumHeatmap.map.remove(); window.fatumHeatmap.map = null; }");
+            }
+            catch { /* ignore */ }
+        }
+        await ValueTask.CompletedTask;
+    }
+}

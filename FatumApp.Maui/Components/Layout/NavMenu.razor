@@ -1,0 +1,21 @@
+@inject ILocalizationService L
+<nav class="bottom-nav-bar">
+    <div class="nav-item">
+        <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
+            <span class="bi bi-house-door-fill-nav-menu" aria-hidden="true"></span>
+            <span class="nav-label">@L.GetString("Nav.Generate")</span>
+        </NavLink>
+    </div>
+    <div class="nav-item">
+        <NavLink class="nav-link" href="history">
+            <span class="bi bi-book-nav-menu" aria-hidden="true"></span>
+            <span class="nav-label">@L.GetString("Nav.History")</span>
+        </NavLink>
+    </div>
+    <div class="nav-item">
+        <NavLink class="nav-link" href="quantum-settings">
+            <span class="bi bi-gear-fill-nav-menu" aria-hidden="true"></span>
+            <span class="nav-label">@L.GetString("Nav.Settings")</span>
+        </NavLink>
+    </div>
+</nav>

@@ -1,0 +1,93 @@
+@page "/map-picker"
+@using Microsoft.AspNetCore.Components.Web
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+@inject ILocalizationService L
+@implements IAsyncDisposable
+
+<PageTitle>@L.GetString("MapPicker.Title") - Fatum</PageTitle>
+
+<div class="container p-3">
+    <h1 class="mb-3">@L.GetString("MapPicker.Title")</h1>
+    <p class="text-muted small">@L.GetString("MapPicker.Instructions")</p>
+
+    <div id="map-picker-container" style="height: 400px; width: 100%; border: 1px solid #3d3d5c; border-radius: 8px;"></div>
+
+    @if (_hasSelection)
+    {
+        <p class="mt-2 small">Lat: @_selectedLat.ToString("F5") | Lon: @_selectedLon.ToString("F5")</p>
+        <div class="d-flex gap-2 mt-2">
+            <button class="btn btn-success" @onclick="ConfirmLocation">@L.GetString("MapPicker.UseLocation")</button>
+            <button class="btn btn-outline-secondary" @onclick="Cancel">@L.GetString("MapPicker.Cancel")</button>
+        </div>
+    }
+    else
+    {
+        <p class="mt-2 text-muted small">@L.GetString("MapPicker.TapToMark")</p>
+        <button class="btn btn-outline-secondary mt-2" @onclick="Cancel">@L.GetString("MapPicker.Cancel")</button>
+    }
+</div>
+
+@code {
+    private double _initialLat = 40.0;
+    private double _initialLon = -3.7;
+    private double _selectedLat;
+    private double _selectedLon;
+    private bool _hasSelection;
+    private DotNetObjectReference<MapPicker>? _dotNetRef;
+
+    protected override void OnInitialized()
+    {
+        var uri = Navigation.Uri;
+        var query = uri.Contains('?') ? uri.Substring(uri.IndexOf('?') + 1) : "";
+        foreach (var part in query.Split('&'))
+        {
+            var kv = part.Split('=', 2, StringSplitOptions.None);
+            if (kv.Length != 2) continue;
+            var key = Uri.UnescapeDataString(kv[0].Trim());
+            var value = Uri.UnescapeDataString(kv[1].Trim());
+            if (key == "lat" && double.TryParse(value, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var lat))
+                _initialLat = lat;
+            if (key == "lon" && double.TryParse(value, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var lon))
+                _initialLon = lon;
+        }
+        _selectedLat = _initialLat;
+        _selectedLon = _initialLon;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _dotNetRef = DotNetObjectReference.Create(this);
+            await JS.InvokeVoidAsync("fatumMapPicker.init", "map-picker-container", _initialLat, _initialLon, _dotNetRef);
+        }
+    }
+
+    [JSInvokable]
+    public void OnMapClicked(double lat, double lon)
+    {
+        _selectedLat = lat;
+        _selectedLon = lon;
+        _hasSelection = true;
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void ConfirmLocation()
+    {
+        var latStr = _selectedLat.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        var lonStr = _selectedLon.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        Navigation.NavigateTo($"/?lat={latStr}&lon={lonStr}", forceLoad: false);
+    }
+
+    private void Cancel()
+    {
+        Navigation.NavigateTo("/");
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        _dotNetRef?.Dispose();
+        await ValueTask.CompletedTask;
+    }
+}

@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:maps="clr-namespace:Microsoft.Maui.Controls.Maps;assembly=Microsoft.Maui.Controls.Maps"
+             x:Class="FatumApp.Maui.Pages.MapPickerPage"
+             Title="Seleccionar ubicación">
+
+    <Grid RowDefinitions="*,Auto" Padding="10">
+        <maps:Map x:Name="map"
+                  Grid.Row="0"
+                  MapClicked="OnMapClicked" />
+        <VerticalStackLayout Grid.Row="1" Spacing="8" Margin="0,8,0,0">
+            <Label x:Name="coordLabel" Text="Toca el mapa para elegir un punto" HorizontalOptions="Center" />
+            <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
+                <Button Grid.Column="0" Text="Cancelar" Clicked="OnCancelClicked" />
+                <Button Grid.Column="1" Text="Usar esta ubicación" Clicked="OnConfirmClicked" />
+            </Grid>
+        </VerticalStackLayout>
+    </Grid>
+</ContentPage>

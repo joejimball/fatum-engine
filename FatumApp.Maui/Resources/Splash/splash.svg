@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <!-- Pin de ubicación (Fatum: exploración, coordenadas) -->
+  <path d="M64 12 C40 12 22 34 22 56 C22 82 64 116 64 116 C64 116 106 82 106 56 C106 34 88 12 64 12 Z" fill="#6ea8fe"/>
+  <circle cx="64" cy="56" r="16" fill="#1a1a2e"/>
+  <!-- Destello -->
+  <path d="M64 30 L67 22 L70 30 L78 33 L70 36 L67 44 L64 36 L56 33 Z" fill="#e8e8e8"/>
+</svg>

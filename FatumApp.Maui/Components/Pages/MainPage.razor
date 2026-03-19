@@ -1,0 +1,354 @@
+@page "/"
+@using FatumApp.Maui.Helps
+@using FatumCommon.Domain
+@using FatumCommon.Enums
+@using FatumApp.Maui.Services
+@using FatumApp.Maui.Infrastructure.Data
+@using FatumCommon.Infrastructure.Data
+@using Microsoft.Maui.ApplicationModel
+@inject IFatumGeneratorService FatumGenerator
+@inject IDatabaseInitializer DbInitializer
+@inject NavigationManager Navigation
+@inject ILocalizationService L
+@inject ILogger<MainPage> Logger
+
+<PageTitle>Fatum - @L.GetString("Nav.Generate")</PageTitle>
+
+<div class="container p-3">
+    <h1 class="mb-3">@L.GetString("Main.Title")</h1>
+
+    <div class="card mb-3">
+        <div class="card-body">
+            <h5 class="card-title">@L.GetString("Main.SearchType")</h5>
+            <div class="btn-group w-100" role="group">
+                <input type="radio" class="btn-check" name="tipo" id="tipoAtractor" checked @onchange="@(() => SetTipo(EnumAnomalyType.Attractor))" />
+                <label class="btn btn-outline-primary" for="tipoAtractor">@L.GetString("Main.Attractor")</label>
+                <input type="radio" class="btn-check" name="tipo" id="tipoVacio" @onchange="@(() => SetTipo(EnumAnomalyType.Void))" />
+                <label class="btn btn-outline-primary" for="tipoVacio">@L.GetString("Main.Void")</label>
+                <input type="radio" class="btn-check" name="tipo" id="tipoAnomalia"  @onchange="@(() => SetTipo(EnumAnomalyType.None))" />
+                <label class="btn btn-outline-primary" for="tipoAnomalia">@L.GetString("Main.Power")</label>
+            </div>
+        </div>
+    </div>
+
+    <div class="card mb-3">
+        <div class="card-body">
+            <h5 class="card-title">@L.GetString("Main.Radius"): @(RadioKm) km</h5>
+            <input type="range" class="form-range" min="1" max="10" step="0.5" @bind="RadioKm" @bind:event="oninput" />
+        </div>
+    </div>
+
+    <div class="card mb-3">
+        <div class="card-body">
+            <div class="d-flex gap-2 flex-wrap">
+                <button class="btn btn-primary" @onclick="CenterMapOnCurrentLocationAsync" disabled="@(_loadingGps)">
+                    @if (_loadingGps)
+                    {
+                        <span class="spinner-border spinner-border-sm"></span>
+                    }
+                    else
+                    {
+                        <span>📍 @L.GetString("Main.CenterMyLocation")</span>
+                    }
+                </button>
+                <button class="btn btn-outline-primary" @onclick="GoToMapPicker" title="@L.GetString("Main.PickOnMapTitle")">
+                    <span>🗺️ @L.GetString("Main.PickOnMap")</span>
+                </button>
+            </div>
+
+            <p class="text-muted small">
+                Lat: @CenterLat.ToString("F5") |
+                Lon: @CenterLon.ToString("F5")
+            </p>
+
+            <div style="height:350px;">
+                <iframe @key="_mapRefreshKey" src="@MapUrl"
+                        style="width:100%; height:100%; border:0;">
+                </iframe>
+            </div>
+        </div>
+    </div>
+
+    <div class="card mb-3">
+        <div class="card-body">
+            <button class="btn btn-success btn-lg w-100" @onclick="GenerateAsync" disabled="@(_generating)">
+                @if (_generating) { <span class="spinner-border spinner-border-sm"></span> @L.GetString("Main.Generating") }
+                else { <span>✨ @L.GetString("Main.Generate")</span> }
+            </button>
+        </div>
+    </div>
+
+    @if (_error != null)
+    {
+        <div class="alert alert-danger">@_error</div>
+    }
+    @if (_successMessage != null)
+    {
+        <div class="alert alert-success">@_successMessage</div>
+    }
+
+    @if (_lastAnomalia != null)
+    {
+        <div class="card border-success mb-3">
+            <div class="card-header bg-success text-white">@L.GetString("Main.Result")</div>
+            <div class="card-body">
+                <p><strong>@L.GetString("Main.Coordinates"):</strong> @(_lastAnomalia.Latitude.ToString("F5")), @(_lastAnomalia.Longitude.ToString("F5"))</p>
+
+                <div class="mt-2">
+                    <div class="d-flex gap-2 align-items-center small mb-1">
+                        <span class="text-muted">OLC:</span> <code>@(_lastAnomalia.OpenLocationCode ?? "—")</code>
+                        <button class="btn btn-sm btn-outline-secondary" title="Copiar OLC" disabled="@string.IsNullOrWhiteSpace(_lastAnomalia.OpenLocationCode)" @onclick="@(() => CopyCodeAsync(_lastAnomalia.OpenLocationCode))">📋</button>
+                        <button class="btn btn-sm btn-outline-primary" title="Abrir OLC" disabled="@string.IsNullOrWhiteSpace(_lastAnomalia.OpenLocationCode)" @onclick="@(() => UrlHelps.OpenPlusCodeAsync(_lastAnomalia.OpenLocationCode))">↗</button>
+                    </div>
+                    <div class="d-flex gap-2 align-items-center small mb-1">
+                        <span class="text-muted">Geohash:</span> <code>@(_lastAnomalia.GeoHash ?? "—")</code>
+                        <button class="btn btn-sm btn-outline-secondary" title="Copiar Geohash" disabled="@string.IsNullOrWhiteSpace(_lastAnomalia.GeoHash)" @onclick="@(() => CopyCodeAsync(_lastAnomalia.GeoHash))">📋</button>
+                        <button class="btn btn-sm btn-outline-primary" title="Abrir Geohash" disabled="@string.IsNullOrWhiteSpace(_lastAnomalia.GeoHash)" @onclick="@(() => UrlHelps.OpenGeoHashAsync(_lastAnomalia.GeoHash))">↗</button>
+                    </div>
+                    <div class="d-flex gap-2 align-items-center small">
+                        <span class="text-muted">what3words:</span> <code>@(_lastAnomalia.What3Words ?? "—")</code>
+                        <button class="btn btn-sm btn-outline-secondary" title="Copiar what3words" disabled="@string.IsNullOrWhiteSpace(_lastAnomalia.What3Words)" @onclick="@(() => CopyCodeAsync(_lastAnomalia.What3Words))">📋</button>
+                        <button class="btn btn-sm btn-outline-primary" title="Abrir what3words" disabled="@string.IsNullOrWhiteSpace(_lastAnomalia.What3Words)" @onclick="@(() => UrlHelps.OpenWhat3WordsAsync(_lastAnomalia.What3Words))">↗</button>
+                    </div>
+                </div>
+
+                <p><strong>@L.GetString("Main.Type"):</strong> @(_lastAnomalia.TipoAnomalia)</p>
+                <p><strong>Power:</strong></p>
+                <div class="progress" style="height: 24px;">
+                    <div class="progress-bar" role="progressbar"
+                         style="width: @((Math.Min(100, _lastAnomalia.Power * 10)).ToString("F1", System.Globalization.CultureInfo.InvariantCulture))%;"
+                         aria-valuenow="@_lastAnomalia.Power" aria-valuemin="0" aria-valuemax="10">
+                        @(_lastAnomalia.Power.ToString("F1"))
+                    </div>
+                </div>
+                <p class="mt-2"><strong>QuantumPotential:</strong> @(_lastAnomalia.QuantumPotential.ToString("F4"))</p>
+                <p><strong>ZScore:</strong> @(_lastAnomalia.ZScoreFinal.ToString("F2"))</p>
+                <!-- NUEVO BOTÓN -->
+                <button class="btn btn-primary mt-3 w-100"
+                        @onclick="OpenInGoogleMaps">
+                    🗺️ @L.GetString("Main.OpenInGoogleMaps")
+                </button>
+            </div>
+        </div>
+    }
+
+</div>
+
+@code {
+    private double _radioKm = 1;
+    private double RadioKm { get => _radioKm; set => _radioKm = Math.Clamp(value, 1, 10); }
+    private double _centerLat = 40.0;
+    private double _centerLon = -3.7;
+    private double CenterLat { get => _centerLat; set => _centerLat = value; }
+    private double CenterLon { get => _centerLon; set => _centerLon = value; }
+    private EnumAnomalyType _tipo = EnumAnomalyType.Attractor;
+    private bool _generating;
+    private bool _loadingGps;
+    private string? _error;
+    private string? _successMessage;
+    private System.Threading.CancellationTokenSource? _copyMessageCts;
+    private Anomalia? _lastAnomalia;
+    private int _mapRefreshKey;
+
+    private string MapUrl
+    {
+        get
+        {
+            var inv = System.Globalization.CultureInfo.InvariantCulture;
+            var bbox = $"{(_centerLon - 0.02).ToString(inv)}%2C{(_centerLat - 0.02).ToString(inv)}%2C{(_centerLon + 0.02).ToString(inv)}%2C{(_centerLat + 0.02).ToString(inv)}";
+            var marker = $"{_centerLat.ToString(inv)}%2C{_centerLon.ToString(inv)}";
+            return $"https://www.openstreetmap.org/export/embed.html?bbox={bbox}&layer=mapnik&marker={marker}";
+        }
+    }
+
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            await DbInitializer.InitializeAsync().ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error al inicializar la base de datos");
+            _error = "No se pudo inicializar la base de datos. " + ex.Message;
+        }
+
+        // Si volvemos del selector de mapa con lat/lon en la URL, usar esos valores
+        if (TryGetQueryLatLon(out var lat, out var lon))
+        {
+            _centerLat = lat;
+            _centerLon = lon;
+            _mapRefreshKey++;
+        }
+        else
+        {
+            // Seleccionar ubicación actual del GPS al iniciar la app
+            await GetCurrentLocationAsync().ConfigureAwait(true);
+        }
+    }
+
+    private bool TryGetQueryLatLon(out double lat, out double lon)
+    {
+        lat = 0;
+        lon = 0;
+        var uri = Navigation.Uri;
+        var query = uri.Contains('?') ? uri.Substring(uri.IndexOf('?') + 1) : "";
+        var hasLat = false;
+        var hasLon = false;
+        foreach (var part in query.Split('&'))
+        {
+            var kv = part.Split('=', 2, StringSplitOptions.None);
+            if (kv.Length != 2) continue;
+            var key = Uri.UnescapeDataString(kv[0].Trim());
+            var value = Uri.UnescapeDataString(kv[1].Trim());
+            if (key == "lat") hasLat = double.TryParse(value, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out lat);
+            if (key == "lon") hasLon = double.TryParse(value, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out lon);
+        }
+        return hasLat && hasLon;
+    }
+
+    private void GoToMapPicker()
+    {
+        var latStr = _centerLat.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        var lonStr = _centerLon.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        Navigation.NavigateTo($"/map-picker?lat={latStr}&lon={lonStr}");
+    }
+
+    private void SetTipo(EnumAnomalyType tipo) => _tipo = tipo;
+
+    /// <summary>Obtiene la ubicación actual y centra el mapa en ella (para cuando el usuario ha movido el mapa y quiere volver a su posición).</summary>
+    private async Task CenterMapOnCurrentLocationAsync()
+    {
+        _loadingGps = true;
+        _error = null;
+        StateHasChanged();
+        try
+        {
+            var status = await Permissions.RequestAsync<Permissions.LocationWhenInUse>().ConfigureAwait(true);
+            if (status != PermissionStatus.Granted)
+            {
+                _error = "Se necesita permiso de ubicación para usar GPS.";
+                return;
+            }
+            var request = new GeolocationRequest(GeolocationAccuracy.Medium, TimeSpan.FromSeconds(10));
+            var location = await Geolocation.Default.GetLocationAsync(request).ConfigureAwait(true);
+            if (location != null)
+            {
+                _centerLat = location.Latitude;
+                _centerLon = location.Longitude;
+                _mapRefreshKey++;
+            }
+            else
+                _error = "No se pudo obtener la ubicación.";
+        }
+        catch (PermissionException)
+        {
+            _error = "Se necesita permiso de ubicación.";
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Error obteniendo ubicación");
+            _error = ex.Message;
+        }
+        finally
+        {
+            _loadingGps = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task GetCurrentLocationAsync()
+    {
+        await CenterMapOnCurrentLocationAsync().ConfigureAwait(true);
+    }
+
+    private async Task GenerateAsync()
+    {
+        _generating = true;
+        _error = null;
+        _lastAnomalia = null;
+        StateHasChanged();
+        try
+        {
+            int radiusMeters = (int)(_radioKm * 1000);
+            var anomalia = await FatumGenerator.GenerateAsync(_centerLat, _centerLon, radiusMeters, _tipo).ConfigureAwait(true);
+            _lastAnomalia = anomalia;
+            if (anomalia == null)
+                _error = "No se encontró anomalía para este punto. Prueba otro radio o ubicación.";
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error generando Fatum");
+            _error = ex.Message;
+        }
+        finally
+        {
+            _generating = false;
+            StateHasChanged();
+        }
+    }
+
+    
+    private async Task OpenInGoogleMaps()
+    {
+        if (_lastAnomalia == null)
+            return;
+
+        var lat = _lastAnomalia.Latitude;
+        var lon = _lastAnomalia.Longitude;
+
+        var url = $"https://www.google.com/maps/search/?api=1&query={lat},{lon}";
+
+        try
+        {
+            await Launcher.Default.OpenAsync(url);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "No se pudo abrir Google Maps");
+        }
+    }
+
+    private async Task CopyCodeAsync(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return;
+
+        // Fuerza a que el mensaje se “reinicie” al pulsar varias veces el botón.
+        _copyMessageCts?.Cancel();
+        _successMessage = null;
+        StateHasChanged();
+
+        _copyMessageCts = new System.Threading.CancellationTokenSource();
+        var localCts = _copyMessageCts;
+
+        await Clipboard.Default.SetTextAsync(value).ConfigureAwait(true);
+
+        _successMessage = "Código copiado al portapapeles.";
+        StateHasChanged();
+
+        // Oculta el mensaje pasado un tiempo para que el usuario lo vuelva a ver
+        // si presiona de nuevo el botón.
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await Task.Delay(2000, localCts.Token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                return;
+            }
+
+            await InvokeAsync(() =>
+            {
+                if (_copyMessageCts == localCts)
+                {
+                    _successMessage = null;
+                    StateHasChanged();
+                }
+            }).ConfigureAwait(false);
+        });
+    }
+}

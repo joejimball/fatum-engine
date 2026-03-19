@@ -1,0 +1,31 @@
+/* Leyenda de la escala del mapa de calor KDE */
+.heatmap-legend {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    max-width: 360px;
+}
+
+.heatmap-legend-title {
+    font-size: 0.875rem;
+    color: var(--bs-secondary-color, #6c757d);
+}
+
+.heatmap-legend-bar {
+    display: flex;
+    height: 12px;
+    border-radius: 4px;
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.heatmap-legend-segment {
+    flex: 1;
+}
+
+.heatmap-legend-labels {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.75rem;
+    color: var(--bs-secondary-color, #6c757d);
+}

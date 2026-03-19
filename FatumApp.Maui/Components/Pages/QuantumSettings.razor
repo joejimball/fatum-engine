@@ -1,0 +1,258 @@
+@page "/quantum-settings"
+@using FatumCommon.Enums
+@inject IQuantumSettingsService _quantumSettingsService
+@inject ILocalizationService L
+
+<h3>@L.GetString("Settings.RngTitle")</h3>
+
+<div class="mb-3">
+    <label class="form-label">@L.GetString("Settings.Language")</label>
+    <select class="form-select" value="@_selectedLanguage" @onchange="OnLanguageChanged">
+        @foreach (var lang in L.SupportedLanguages)
+        {
+            <option value="@lang.Key">@lang.Value</option>
+        }
+    </select>
+</div>
+
+<p class="text-muted small">@L.GetString("Settings.RngDescription")</p>
+
+<div class="mb-3">
+    <label class="form-label">@L.GetString("Settings.Generator")</label>
+    <div class="btn-group w-100" role="group">
+        <input type="radio" class="btn-check" name="rngType" id="rngPrng" checked="@(SelectedRngType == EnumTypeRnd.PRNG)" @onchange="@(() => SetRngType(EnumTypeRnd.PRNG))" />
+        <label class="btn btn-outline-primary" for="rngPrng">@L.GetString("Settings.PRNG")</label>
+        <input type="radio" class="btn-check" name="rngType" id="rngQrng" checked="@(SelectedRngType == EnumTypeRnd.QRNG)" @onchange="@(() => SetRngType(EnumTypeRnd.QRNG))" />
+        <label class="btn btn-outline-primary" for="rngQrng">@L.GetString("Settings.QRNG")</label>
+    </div>
+</div>
+
+@if (SelectedRngType == EnumTypeRnd.QRNG)
+{
+    <div class="mb-3">
+        <label class="form-label">@L.GetString("Settings.ApiKeyLabel")</label>
+        <input type="password" class="form-control" @bind="ApiKeyInput" placeholder="@L.GetString("Settings.ApiKeyPlaceholder")" />
+    </div>
+
+    <div class="mb-3">
+        <button class="btn btn-primary me-2" @onclick="SaveApiKey">
+            @L.GetString("Settings.SaveValidateKey")
+        </button>
+        <button class="btn btn-danger" @onclick="DeleteApiKey">
+            @L.GetString("Settings.DeleteKey")
+        </button>
+    </div>
+
+    @if (HasKeyStored)
+    {
+        <div class="alert alert-success mb-3">
+            @L.GetString("Settings.KeyStored")
+        </div>
+    }
+}
+
+<div class="mb-3 mt-4">
+    <label class="form-label">what3words API Key</label>
+    <input type="password" class="form-control" @bind="What3WordsApiKeyInput" placeholder="Opcional (si quieres ver What3Words en las ubicaciones)" />
+</div>
+
+<div class="mb-3">
+    <button class="btn btn-primary me-2" @onclick="SaveWhat3WordsApiKeyAsync" disabled="@(_savingWhat3WordsKey)">
+        @if (_savingWhat3WordsKey) { <span class="spinner-border spinner-border-sm"></span> }
+        else { <span>Guardar</span> }
+    </button>
+    <button class="btn btn-outline-danger" @onclick="DeleteWhat3WordsApiKey" disabled="@(_savingWhat3WordsKey)">
+        Eliminar
+    </button>
+</div>
+
+@if (HasWhat3WordsKeyStored)
+{
+    <div class="alert alert-success mb-3">
+        ✔ what3words API Key almacenada correctamente
+    </div>
+}
+
+<div class="mb-3">
+    <button class="btn btn-primary" @onclick="SaveRngType">
+        @L.GetString("Settings.SaveGenerator")
+    </button>
+</div>
+
+@if (!string.IsNullOrEmpty(StatusMessage))
+{
+    <div class="alert @StatusClass">
+        @StatusMessage
+    </div>
+}
+
+@code {
+    private string? ApiKeyInput;
+    private string? What3WordsApiKeyInput;
+    private string? StatusMessage;
+    private string StatusClass = "alert-info";
+    private bool HasKeyStored;
+    private bool HasWhat3WordsKeyStored;
+    private bool _savingWhat3WordsKey;
+    private EnumTypeRnd SelectedRngType = EnumTypeRnd.PRNG;
+    private string _selectedLanguage = "es";
+
+    protected override async Task OnInitializedAsync()
+    {
+        _selectedLanguage = L.CurrentLanguage;
+        SelectedRngType = await _quantumSettingsService.GetTypeRnd();
+        var storedKey = await _quantumSettingsService.GetApiKeyAsync();
+        HasKeyStored = !string.IsNullOrEmpty(storedKey);
+
+        var storedW3wKey = await _quantumSettingsService.GetWhat3WordsApiKeyAsync();
+        HasWhat3WordsKeyStored = !string.IsNullOrEmpty(storedW3wKey);
+    }
+
+    private void OnLanguageChanged(ChangeEventArgs e)
+    {
+        var code = e.Value?.ToString();
+        if (!string.IsNullOrEmpty(code))
+        {
+            _selectedLanguage = code;
+            L.SetLanguage(code);
+        }
+    }
+
+    private void SetRngType(EnumTypeRnd type)
+    {
+        SelectedRngType = type;
+        StateHasChanged();
+    }
+
+    private async Task SaveRngType()
+    {
+        await _quantumSettingsService.SetTypeRnd(SelectedRngType.ToString());
+        ShowMessage($"Generador guardado: {SelectedRngType}", "alert-success");
+    }
+
+    private async Task SaveApiKey()
+    {
+        if (string.IsNullOrWhiteSpace(ApiKeyInput))
+        {
+            ShowMessage("La API Key no puede estar vacía", "alert-warning");
+            return;
+        }
+
+        var isValid = await ValidateKeyAsync(ApiKeyInput);
+
+        if (!isValid)
+        {
+            ShowMessage("API Key inválida o error al validar", "alert-danger");
+            return;
+        }
+
+        await _quantumSettingsService.SetApiKeyAsync(ApiKeyInput);
+        HasKeyStored = true;
+        ApiKeyInput = string.Empty;
+
+        ShowMessage("API Key guardada correctamente", "alert-success");
+    }
+
+    private async Task DeleteApiKey()
+    {
+        _quantumSettingsService.RemoveApiKey();
+        HasKeyStored = false;
+        ShowMessage("API Key eliminada", "alert-info");
+        await Task.CompletedTask;
+    }
+
+    private async Task SaveWhat3WordsApiKeyAsync()
+    {
+        _savingWhat3WordsKey = true;
+        try
+        {
+            if (string.IsNullOrWhiteSpace(What3WordsApiKeyInput))
+            {
+                ShowMessage("La API Key de what3words no puede estar vacía", "alert-warning");
+                return;
+            }
+
+            var isValid = await ValidateWhat3WordsKeyAsync(What3WordsApiKeyInput).ConfigureAwait(true);
+            if (!isValid)
+            {
+                ShowMessage("API Key inválida o error al validar (what3words)", "alert-danger");
+                return;
+            }
+
+            await _quantumSettingsService.SetWhat3WordsApiKeyAsync(What3WordsApiKeyInput).ConfigureAwait(true);
+            HasWhat3WordsKeyStored = true;
+            What3WordsApiKeyInput = string.Empty;
+
+            ShowMessage("API Key de what3words guardada correctamente", "alert-success");
+        }
+        finally
+        {
+            _savingWhat3WordsKey = false;
+        }
+    }
+
+    private async Task<bool> ValidateWhat3WordsKeyAsync(string apiKey, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            using var request = new HttpRequestMessage(
+                HttpMethod.Get,
+                "https://api.what3words.com/v3/convert-to-3wa?coordinates=51.521251%2C-0.203586&language=en&format=json");
+
+            request.Headers.Add("X-Api-Key", apiKey);
+
+            using (var httpClient = new HttpClient())
+            {
+                var response = await httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
+                return response.IsSuccessStatusCode;
+            }
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private async Task DeleteWhat3WordsApiKey()
+    {
+        _quantumSettingsService.RemoveWhat3WordsApiKey();
+        HasWhat3WordsKeyStored = false;
+        What3WordsApiKeyInput = string.Empty;
+        ShowMessage("API Key de what3words eliminada", "alert-info");
+        await Task.CompletedTask;
+    }
+
+    private async Task<bool> ValidateKeyAsync(string apiKey, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(apiKey))
+            return false;
+
+        try
+        {
+            using var request = new HttpRequestMessage(
+                HttpMethod.Get,
+                "https://qrng.anu.edu.au/API/jsonI.php?length=1&type=uint8");
+
+            request.Headers.Add("x-api-key", apiKey);
+            using (var httpClient = new HttpClient())
+            {
+                var response = await httpClient.SendAsync(request, cancellationToken);
+                return response.IsSuccessStatusCode;
+            }
+        }
+        catch (HttpRequestException)
+        {
+            return false;
+        }
+        catch (TaskCanceledException)
+        {
+            return false;
+        }
+    }
+
+    private void ShowMessage(string message, string cssClass)
+    {
+        StatusMessage = message;
+        StatusClass = cssClass;
+    }
+}

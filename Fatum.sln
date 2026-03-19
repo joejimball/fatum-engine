@@ -1,0 +1,62 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 18
+VisualStudioVersion = 18.3.11520.95
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FatumCommon", "FatumCommon\FatumCommon.csproj", "{0D5F1799-04CD-447F-A27C-71017F6100A3}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FatumApp.Maui", "FatumApp.Maui\FatumApp.Maui.csproj", "{EFBED661-162B-A5D3-E1EC-483C019D85CF}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Elementos de la solución", "Elementos de la solución", "{23185106-D0CB-4546-B02D-A116B34CF1F9}"
+	ProjectSection(SolutionItems) = preProject
+		.gitignore = .gitignore
+	EndProjectSection
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Debug|x64 = Debug|x64
+		Debug|x86 = Debug|x86
+		Release|Any CPU = Release|Any CPU
+		Release|x64 = Release|x64
+		Release|x86 = Release|x86
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{0D5F1799-04CD-447F-A27C-71017F6100A3}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{0D5F1799-04CD-447F-A27C-71017F6100A3}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{0D5F1799-04CD-447F-A27C-71017F6100A3}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{0D5F1799-04CD-447F-A27C-71017F6100A3}.Debug|x64.Build.0 = Debug|Any CPU
+		{0D5F1799-04CD-447F-A27C-71017F6100A3}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{0D5F1799-04CD-447F-A27C-71017F6100A3}.Debug|x86.Build.0 = Debug|Any CPU
+		{0D5F1799-04CD-447F-A27C-71017F6100A3}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{0D5F1799-04CD-447F-A27C-71017F6100A3}.Release|Any CPU.Build.0 = Release|Any CPU
+		{0D5F1799-04CD-447F-A27C-71017F6100A3}.Release|x64.ActiveCfg = Release|Any CPU
+		{0D5F1799-04CD-447F-A27C-71017F6100A3}.Release|x64.Build.0 = Release|Any CPU
+		{0D5F1799-04CD-447F-A27C-71017F6100A3}.Release|x86.ActiveCfg = Release|Any CPU
+		{0D5F1799-04CD-447F-A27C-71017F6100A3}.Release|x86.Build.0 = Release|Any CPU
+		{EFBED661-162B-A5D3-E1EC-483C019D85CF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{EFBED661-162B-A5D3-E1EC-483C019D85CF}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{EFBED661-162B-A5D3-E1EC-483C019D85CF}.Debug|Any CPU.Deploy.0 = Debug|Any CPU
+		{EFBED661-162B-A5D3-E1EC-483C019D85CF}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{EFBED661-162B-A5D3-E1EC-483C019D85CF}.Debug|x64.Build.0 = Debug|Any CPU
+		{EFBED661-162B-A5D3-E1EC-483C019D85CF}.Debug|x64.Deploy.0 = Debug|Any CPU
+		{EFBED661-162B-A5D3-E1EC-483C019D85CF}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{EFBED661-162B-A5D3-E1EC-483C019D85CF}.Debug|x86.Build.0 = Debug|Any CPU
+		{EFBED661-162B-A5D3-E1EC-483C019D85CF}.Debug|x86.Deploy.0 = Debug|Any CPU
+		{EFBED661-162B-A5D3-E1EC-483C019D85CF}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{EFBED661-162B-A5D3-E1EC-483C019D85CF}.Release|Any CPU.Build.0 = Release|Any CPU
+		{EFBED661-162B-A5D3-E1EC-483C019D85CF}.Release|Any CPU.Deploy.0 = Release|Any CPU
+		{EFBED661-162B-A5D3-E1EC-483C019D85CF}.Release|x64.ActiveCfg = Release|Any CPU
+		{EFBED661-162B-A5D3-E1EC-483C019D85CF}.Release|x64.Build.0 = Release|Any CPU
+		{EFBED661-162B-A5D3-E1EC-483C019D85CF}.Release|x64.Deploy.0 = Release|Any CPU
+		{EFBED661-162B-A5D3-E1EC-483C019D85CF}.Release|x86.ActiveCfg = Release|Any CPU
+		{EFBED661-162B-A5D3-E1EC-483C019D85CF}.Release|x86.Build.0 = Release|Any CPU
+		{EFBED661-162B-A5D3-E1EC-483C019D85CF}.Release|x86.Deploy.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {3375C441-FB5F-4FD1-8335-00516987C6E5}
+	EndGlobalSection
+EndGlobal
