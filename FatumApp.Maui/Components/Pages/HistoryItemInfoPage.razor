@@ -1,0 +1,225 @@
+@page "/history/info/{FatumId:long}"
+@using FatumApp.Maui.Helps
+@using FatumCommon.Domain
+@using FatumApp.Maui.Infrastructure.Data
+@using FatumCommon.Infrastructure.Data
+@using Microsoft.Maui.ApplicationModel
+@inject IUnitOfWork UnitOfWork
+@inject NavigationManager Navigation
+@inject ILogger<HistoryItemInfoPage> Logger
+@inject ILocalizationService L
+
+<PageTitle>@L.GetString("History.InfoTitle") - Fatum</PageTitle>
+
+<div class="container p-3">
+    <div class="mb-3">
+        <a href="/history" class="text-decoration-none">@L.GetString("History.InfoBack")</a>
+    </div>
+
+    @if (_loading)
+    {
+        <p>@L.GetString("History.Loading")</p>
+    }
+    else if (_notFound || _fatum == null)
+    {
+        <div class="alert alert-warning">@L.GetString("History.InfoNotFound")</div>
+        <a class="btn btn-outline-primary" href="/history">@L.GetString("History.InfoBack")</a>
+    }
+    else
+    {
+        @if (_successMessage != null)
+        {
+            <div class="alert alert-success">@_successMessage</div>
+        }
+
+        <h1 class="h4 mb-3">@L.GetString("History.InfoTitle") · Fatum #@_fatum.Id</h1>
+        <p class="small text-muted mb-3">
+            @_fatum.CreatedAt.ToLocalTime().ToString("g") · @((_fatum.Radio / 1000.0).ToString("F1")) km · @_fatum.NumPuntos puntos
+        </p>
+
+        <div class="d-flex flex-wrap gap-2 mb-4">
+            <button type="button" class="btn btn-sm btn-outline-info" @onclick="OpenHeatmap" title="@L.GetString("History.Heatmap")">
+                🔥 @L.GetString("History.Heatmap")
+            </button>
+        </div>
+
+        <section class="mb-4">
+            <h2 class="h6 text-muted">@L.GetString("History.InfoCenter")</h2>
+            <p class="small mb-2">
+                @_fatum.Latitude.ToString("F4"), @_fatum.Longitude.ToString("F4")
+                · <button type="button" class="btn btn-link btn-sm p-0 align-baseline" @onclick="@(() => OpenInGoogleMapsAsync(_fatum.Latitude, _fatum.Longitude))">@L.GetString("History.ViewOnMap")</button>
+            </p>
+            <div class="small">
+                <div class="d-flex gap-2 align-items-center mb-1 flex-wrap">
+                    <span class="text-muted">OLC:</span> <code>@(_fatum.OpenLocationCode ?? "—")</code>
+                    <button class="btn btn-sm btn-outline-secondary" title="Copiar OLC" disabled="@string.IsNullOrWhiteSpace(_fatum.OpenLocationCode)" @onclick="@(() => CopyCodeAsync(_fatum.OpenLocationCode))">📋</button>
+                    <button class="btn btn-sm btn-outline-primary" title="Abrir OLC" disabled="@string.IsNullOrWhiteSpace(_fatum.OpenLocationCode)" @onclick="@(() => UrlHelps.OpenPlusCodeAsync(_fatum.OpenLocationCode))">↗</button>
+                </div>
+                <div class="d-flex gap-2 align-items-center mb-1 flex-wrap">
+                    <span class="text-muted">Geohash:</span> <code>@(_fatum.GeoHash ?? "—")</code>
+                    <button class="btn btn-sm btn-outline-secondary" title="Copiar Geohash" disabled="@string.IsNullOrWhiteSpace(_fatum.GeoHash)" @onclick="@(() => CopyCodeAsync(_fatum.GeoHash))">📋</button>
+                    <button class="btn btn-sm btn-outline-primary" title="Abrir Geohash" disabled="@string.IsNullOrWhiteSpace(_fatum.GeoHash)" @onclick="@(() => UrlHelps.OpenGeoHashAsync(_fatum.GeoHash))">↗</button>
+                </div>
+                <div class="d-flex gap-2 align-items-center flex-wrap">
+                    <span class="text-muted">what3words:</span> <code>@(_fatum.What3Words ?? "—")</code>
+                    <button class="btn btn-sm btn-outline-secondary" title="Copiar what3words" disabled="@string.IsNullOrWhiteSpace(_fatum.What3Words)" @onclick="@(() => CopyCodeAsync(_fatum.What3Words))">📋</button>
+                    <button class="btn btn-sm btn-outline-primary" title="Abrir what3words" disabled="@string.IsNullOrWhiteSpace(_fatum.What3Words)" @onclick="@(() => UrlHelps.OpenWhat3WordsAsync(_fatum.What3Words))">↗</button>
+                </div>
+            </div>
+        </section>
+
+        <section>
+            <h2 class="h6 text-muted">@L.GetString("History.InfoAnomalies")</h2>
+            @if (!_anomalias.Any())
+            {
+                <p class="small text-muted">—</p>
+            }
+            else
+            {
+                <ul class="list-unstyled">
+                    @foreach (var a in _anomalias)
+                    {
+                        <li class="mb-4 pb-3 border-bottom">
+                            <div class="small fw-semibold mb-2">
+                                @a.TipoAnomalia · Power @a.Power.ToString("F1") · Z @a.ZScoreFinal.ToString("F2")
+                            </div>
+                            <p class="small mb-2">
+                                @a.Latitude.ToString("F4"), @a.Longitude.ToString("F4")
+                                · <button type="button" class="btn btn-link btn-sm p-0 align-baseline" @onclick="@(() => OpenInGoogleMapsAsync(a.Latitude, a.Longitude))">@L.GetString("History.ViewOnMap")</button>
+                            </p>
+                            <div class="small">
+                                <div class="d-flex gap-2 align-items-center mb-1 flex-wrap">
+                                    <span class="text-muted">OLC:</span> <code>@(a.OpenLocationCode ?? "—")</code>
+                                    <button class="btn btn-sm btn-outline-secondary" title="Copiar OLC" disabled="@string.IsNullOrWhiteSpace(a.OpenLocationCode)" @onclick="@(() => CopyCodeAsync(a.OpenLocationCode))">📋</button>
+                                    <button class="btn btn-sm btn-outline-primary" title="Abrir OLC" disabled="@string.IsNullOrWhiteSpace(a.OpenLocationCode)" @onclick="@(() => UrlHelps.OpenPlusCodeAsync(a.OpenLocationCode))">↗</button>
+                                </div>
+                                <div class="d-flex gap-2 align-items-center mb-1 flex-wrap">
+                                    <span class="text-muted">Geohash:</span> <code>@(a.GeoHash ?? "—")</code>
+                                    <button class="btn btn-sm btn-outline-secondary" title="Copiar Geohash" disabled="@string.IsNullOrWhiteSpace(a.GeoHash)" @onclick="@(() => CopyCodeAsync(a.GeoHash))">📋</button>
+                                    <button class="btn btn-sm btn-outline-primary" title="Abrir Geohash" disabled="@string.IsNullOrWhiteSpace(a.GeoHash)" @onclick="@(() => UrlHelps.OpenGeoHashAsync(a.GeoHash))">↗</button>
+                                </div>
+                                <div class="d-flex gap-2 align-items-center flex-wrap">
+                                    <span class="text-muted">what3words:</span> <code>@(a.What3Words ?? "—")</code>
+                                    <button class="btn btn-sm btn-outline-secondary" title="Copiar what3words" disabled="@string.IsNullOrWhiteSpace(a.What3Words)" @onclick="@(() => CopyCodeAsync(a.What3Words))">📋</button>
+                                    <button class="btn btn-sm btn-outline-primary" title="Abrir what3words" disabled="@string.IsNullOrWhiteSpace(a.What3Words)" @onclick="@(() => UrlHelps.OpenWhat3WordsAsync(a.What3Words))">↗</button>
+                                </div>
+                            </div>
+                        </li>
+                    }
+                </ul>
+            }
+        </section>
+    }
+</div>
+
+@code {
+    [Parameter] public long FatumId { get; set; }
+
+    private bool _loading = true;
+    private bool _notFound;
+    private Fatum? _fatum;
+    private List<Anomalia> _anomalias = new();
+    private string? _successMessage;
+    private System.Threading.CancellationTokenSource? _copyMessageCts;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await LoadAsync().ConfigureAwait(true);
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _notFound = false;
+        _fatum = null;
+        _anomalias = new List<Anomalia>();
+        StateHasChanged();
+
+        try
+        {
+            var fatum = await UnitOfWork.FatumRepository.GetByIdAsync(FatumId).ConfigureAwait(true);
+            if (fatum == null)
+            {
+                _notFound = true;
+                return;
+            }
+
+            _fatum = fatum;
+            var all = (await UnitOfWork.AnomaliaRepository.GetAllAsync().ConfigureAwait(true)).ToList();
+            _anomalias = all.Where(x => x.IdFatum == FatumId).OrderBy(x => x.Id).ToList();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error cargando información del Fatum {Id}", FatumId);
+            _notFound = true;
+        }
+        finally
+        {
+            _loading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task CopyCodeAsync(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return;
+
+        _copyMessageCts?.Cancel();
+        _successMessage = null;
+        StateHasChanged();
+
+        _copyMessageCts = new System.Threading.CancellationTokenSource();
+        var localCts = _copyMessageCts;
+
+        await Clipboard.Default.SetTextAsync(value).ConfigureAwait(true);
+        _successMessage = L.GetString("History.CopySuccess");
+        StateHasChanged();
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await Task.Delay(2000, localCts.Token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                return;
+            }
+
+            await InvokeAsync(() =>
+            {
+                if (_copyMessageCts == localCts)
+                {
+                    _successMessage = null;
+                    StateHasChanged();
+                }
+            }).ConfigureAwait(false);
+        });
+    }
+
+    // private async Task ViewCenterOnMapAsync()
+    // {
+    //     if (_fatum == null)
+    //         return;
+    //     await OpenInGoogleMapsAsync(_fatum.Latitude, _fatum.Longitude).ConfigureAwait(true);
+    // }
+
+    private void OpenHeatmap()
+    {
+        Navigation.NavigateTo($"/heatmap/{FatumId}");
+    }
+
+    private async Task OpenInGoogleMapsAsync(double lat, double lon)
+    {
+        var url = $"https://www.google.com/maps/search/?api=1&query={lat},{lon}";
+        try
+        {
+            await Launcher.Default.OpenAsync(url).ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "No se pudo abrir Google Maps");
+        }
+    }
+}
