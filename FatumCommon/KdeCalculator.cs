@@ -193,7 +193,7 @@ namespace FatumCommon
                     fatum.Latitude, fatum.Longitude,
                     p.lat, p.lon);
 
-                if(dist <= radioMax)temp.Add(new DensityCell(p.lat, p.lon, p.density, Q[i, j], dist));
+                if (dist <= radioMax) temp.Add(new DensityCell(p.lat, p.lon, p.density, Q[i, j], dist));
             }
 
             int n = temp.Count;
@@ -235,7 +235,7 @@ namespace FatumCommon
                     DensidadEstimacion = c.Density,
                     ZScore = z,
                     QZScore = qz,
-                    ZScoreFinal = CalculaZScoreFinal(z,qz),
+                    ZScoreFinal = CalculaZScoreFinal(z, qz),
                     QuantumPotential = c.QuantumPotential,
                     TipoAnomalia = z < 0
                         ? EnumAnomalyType.Void
@@ -259,7 +259,7 @@ namespace FatumCommon
 
             foreach (var a in anomalias)
             {
-                if (a.ZScore <= 0) continue;
+                if (a.ZScore <= 0.05) continue;
                 if (a.QZScore <= 0) continue;
                 if (a.Distancia > fatum.Radio) continue;
                 double score = Math.Max(0, a.ZScore);
@@ -281,13 +281,13 @@ namespace FatumCommon
 
             foreach (var a in anomalias)
             {
-                if (a.ZScore >= 0) continue;
-                if (a.QZScore >= -0.5) continue;
+                if (a.ZScore >= -0.05) continue;
+                if (a.QZScore >= 0) continue;
                 if (a.Distancia > fatum.Radio) continue;
 
                 double score = Math.Abs(Math.Min(0, a.QZScore));
-                double bordeFactor = 1.0 - (a.Distancia / fatum.Radio);
-                score *= bordeFactor;
+                //double bordeFactor = 1.0 - (a.Distancia / fatum.Radio);
+                //score *= bordeFactor;
 
                 if (score > maxScore)
                 {
@@ -399,7 +399,7 @@ namespace FatumCommon
 
         private static double CalcularPower(Anomalia a)
         {
-            double norm = Math.Abs(a.ZScoreFinal) / SigmaThreshold;
+            double norm = Math.Abs(a.ZScore) / SigmaThreshold;
             if (norm > 1.0) norm = 1.0;
 
             return Math.Round(norm * 10.0, 2);
@@ -407,7 +407,7 @@ namespace FatumCommon
 
         public double CalculaZScoreFinal(double z, double qz)
         {
-            double alpha = 0.60;
+            double alpha = 1.0;
 
             double Zfinal = Math.Sign(z) *
                 Math.Sqrt(z * z + alpha * qz * qz);

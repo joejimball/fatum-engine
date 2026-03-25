@@ -21,7 +21,4 @@
             this.Distance = distance;
         }
     }
-
-
-
 }

@@ -92,7 +92,7 @@ namespace FatumCommon.Domain
                              $"🔍 **Qué podrías encontrar:**\n" +
                              $"{hallazgo}\n\n" +
                              $"⚡ **Power:** {this.Power:F2}\n" +
-                             $" Z **Z-score:** {this.ZScoreFinal:F2}\n" +
+                             $" Z **Z-score:** {this.ZScore:F2}\n" +
                              $"📍 **Distancia:** {distanciaMetros}m\n" +
                              $"📍 **Radio aproximada:** {radioAproximadoMetros}m\n";
 
