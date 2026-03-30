@@ -112,7 +112,7 @@ public sealed class FatumGeneratorService : IFatumGeneratorService
 
         _logger.LogInformation("KDE con {Count} puntos, radio {Radius}m, tipo {Type}", coordList.Count, radiusMeters, anomalyType);
         int gridSize = _kdeCalculator.GetGridSize(radiusMeters);
-        double bandwidth = _kdeCalculator.CalculateSilvermanBandwidth(coordList.Count);
+        double bandwidth = CalculateSilvermanBandwidth(coordList.Count);
         fatum.GridSize = gridSize;
         fatum.Bandwidth = bandwidth;
         (double lat, double lon, double density)[] densityGrid = _kdeCalculator.CalculateKdeOptimized(coordList, bandwidth, gridSize: gridSize);
@@ -146,6 +146,8 @@ public sealed class FatumGeneratorService : IFatumGeneratorService
                 .ConfigureAwait(false);
         }
 
+        fatum.Hmac = FatumHmacHelper.ComputeHmacSha256Hex(fatum);
+
         long fatumId = await this._unitOfWork.FatumRepository.AddAsync(fatum).ConfigureAwait(false);
         result.IdFatum = fatumId;
         await this._unitOfWork.AnomaliaRepository.AddAsync(result).ConfigureAwait(false);
@@ -154,7 +156,17 @@ public sealed class FatumGeneratorService : IFatumGeneratorService
         return result;
     }
 
-    
+    /// <summary>
+    /// Calcula el bandwidth multivariante de Silverman (misma fórmula que usa KdeCalculator cuando bandwidth=null),
+    /// para poder persistirlo y reproducir el KDE.
+    /// </summary>
+    private static double CalculateSilvermanBandwidth(int n)
+    {
+        const double d = 2.0;
+        if (n <= 0) return 0;
+        return Math.Pow(4.0 / (d + 2.0), 1.0 / (d + 4.0)) * Math.Pow(n, -1.0 / (d + 4.0));
+    }
+
     private async Task<string?> ConvertToWhat3WordsAsync(
         double latitude,
         double longitude,

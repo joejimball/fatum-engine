@@ -155,7 +155,67 @@ namespace FatumCommon.Helps
             return numbers;
         }
 
+        public static AnomalyAnalysisResult TestPoint(
+            double lat,
+            double lon,
+            double radius,
+            IList<(double lat, double lon)> testpoints,
+            EnumAnomalyType anomalyType)
+        {
+            var np = TestPoint(lat, lon, radius, testpoints);
 
+            if (anomalyType == EnumAnomalyType.Attractor)
+            {
+                np.IntensidadAnomalia = np.DensidadRelativa;
+            }
+            else if (anomalyType == EnumAnomalyType.Void)
+            {
+                np.IntensidadAnomalia = 1 / (np.DensidadRelativa + 1e-9);
+            }
+            return np;
+        }
+
+        public static AnomalyAnalysisResult TestPoint(
+           double lat,
+           double lon,
+           double radius,
+           IList<(double lat, double lon)> testpoints)
+        {
+            var np = new AnomalyAnalysisResult();
+
+            int N = testpoints.Count;
+
+            // Vecinos adaptativos
+            int k = Math.Max(3, (int)Math.Sqrt(N));
+
+            // Calcular distancias
+            var distancias = testpoints
+                .Select(coord => FatumHelps.GetDistance(lat, lon, coord.lat, coord.lon))
+                .ToArray();
+
+            np.DistanciaMasCercana = distancias.Min();
+
+            var distanciasOrdenadas = distancias.OrderBy(d => d).ToArray();
+
+            // Radio basado en el k-ésimo vecino
+            np.RadioAproximado = distanciasOrdenadas[Math.Min(k, distanciasOrdenadas.Length) - 1];
+
+            int puntosCercanos = distancias.Count(d => d <= np.RadioAproximado);
+
+            // Áreas
+            double areaLocal = Math.PI * Math.Pow(np.RadioAproximado, 2);
+            double areaGlobal = Math.PI * Math.Pow(radius, 2);
+
+            double epsilon = 1e-9;
+
+            // Densidades con suavizado
+            double densidadLocal = (puntosCercanos + 1) / (areaLocal + epsilon);
+            double densidadGlobal = (N + 1) / (areaGlobal + epsilon);
+
+            np.DensidadRelativa = densidadLocal / densidadGlobal;
+
+            return np;
+        }
 
         public static double CalculaRadioAproximado(
             double lat,

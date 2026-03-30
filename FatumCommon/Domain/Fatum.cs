@@ -20,6 +20,8 @@ namespace FatumCommon.Domain
         public long NumPuntos { get; set; }
         public EnumTypeRnd TypeRnd { get; set; }
         public DateTime CreatedAt { get; set; }
+        /// <summary>HMAC-SHA256 en hexadecimal (integridad de <see cref="RandomData"/> respecto a parámetros del Fatum).</summary>
+        public string? Hmac { get; set; }
         public byte[] RandomData { get; set; }
     }
 }

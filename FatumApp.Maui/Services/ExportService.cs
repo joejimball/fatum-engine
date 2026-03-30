@@ -53,6 +53,7 @@ public sealed class ExportService : IExportService
                 NumPuntos = f.NumPuntos,
                 TypeRnd = (int)f.TypeRnd,
                 CreatedAt = f.CreatedAt.ToString("O", CultureInfo.InvariantCulture),
+                Hmac = f.Hmac,
                 RandomDataBase64 = f.RandomData != null ? Convert.ToBase64String(f.RandomData) : null
             }).ToList(),
             Anomalias = anomalias.Select(a => new AnomaliaExportItem
@@ -81,10 +82,10 @@ public sealed class ExportService : IExportService
     public async Task<string> ExportAsCsvAsync(CancellationToken cancellationToken = default)
     {
         var sb = new StringBuilder();
-        sb.AppendLine("Id;Latitude;Longitude;OpenLocationCode;GeoHash;What3Words;GridSize;Bandwidth;Radio;NumPuntos;TypeRnd;CreatedAt");
+        sb.AppendLine("Id;Latitude;Longitude;OpenLocationCode;GeoHash;What3Words;GridSize;Bandwidth;Radio;NumPuntos;TypeRnd;CreatedAt;Hmac");
         var fatums = (await _unitOfWork.FatumRepository.GetAllAsync().ConfigureAwait(false)).ToList();
         foreach (var f in fatums)
-            sb.AppendLine($"{f.Id};{f.Latitude.ToString(CultureInfo.InvariantCulture)};{f.Longitude.ToString(CultureInfo.InvariantCulture)};{f.OpenLocationCode};{f.GeoHash};{f.What3Words};{f.GridSize};{f.Bandwidth};{f.Radio};{f.NumPuntos};{(int)f.TypeRnd};{f.CreatedAt:O}");
+            sb.AppendLine($"{f.Id};{f.Latitude.ToString(CultureInfo.InvariantCulture)};{f.Longitude.ToString(CultureInfo.InvariantCulture)};{f.OpenLocationCode};{f.GeoHash};{f.What3Words};{f.GridSize};{f.Bandwidth};{f.Radio};{f.NumPuntos};{(int)f.TypeRnd};{f.CreatedAt:O};{f.Hmac}");
         sb.AppendLine();
         sb.AppendLine("Id;Latitude;Longitude;OpenLocationCode;GeoHash;What3Words;DensidadEstimacion;Power;ZScore;ZScoreFinal;QZScore;RadioAproximado;TipoAnomalia;IdFatum;Distancia;QuantumPotential");
         var anomalias = (await _unitOfWork.AnomaliaRepository.GetAllAsync().ConfigureAwait(false)).ToList();
@@ -142,6 +143,15 @@ public sealed class ExportService : IExportService
                 CreatedAt = DateTime.Parse(item.CreatedAt, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind),
                 RandomData = string.IsNullOrEmpty(item.RandomDataBase64) ? null : Convert.FromBase64String(item.RandomDataBase64)
             };
+            fatum.Hmac = FatumHmacHelper.ComputeHmacSha256Hex(fatum);
+            if (!string.IsNullOrWhiteSpace(item.Hmac) &&
+                !string.Equals(item.Hmac.Trim(), fatum.Hmac, StringComparison.OrdinalIgnoreCase))
+            {
+                _logger.LogWarning(
+                    "Import JSON: HMAC del Fatum origen Id={OldId} no coincide con los datos; se guarda el hash recalculado.",
+                    item.Id);
+            }
+
             var newId = await _unitOfWork.FatumRepository.AddAsync(fatum).ConfigureAwait(false);
             oldFatumIdToNew[item.Id] = newId;
         }
@@ -203,6 +213,7 @@ public sealed class ExportService : IExportService
         public long NumPuntos { get; set; }
         public int TypeRnd { get; set; }
         public string CreatedAt { get; set; } = "";
+        public string? Hmac { get; set; }
         public string? RandomDataBase64 { get; set; }
     }
 

@@ -309,8 +309,9 @@ namespace FatumCommon
 
             if (result != null)
             {
-                result.RadioAproximado = FatumHelps.CalculaRadioAproximado(fatum.Latitude, fatum.Longitude, coordList, result.TipoAnomalia);
-                result.Power = CalcularPower(result);
+                var point = FatumHelps.TestPoint(fatum.Latitude, fatum.Longitude, fatum.Radio, coordList, EnumAnomalyType.Attractor);
+                result.RadioAproximado = point.RadioAproximado;
+                result.Power = CalcularPower(point);
             }
 
             return result;
@@ -326,13 +327,13 @@ namespace FatumCommon
 
             if (result != null)
             {
-                result.RadioAproximado = FatumHelps.CalculaRadioAproximado(fatum.Latitude, fatum.Longitude, coordList, result.TipoAnomalia);
-                result.Power = CalcularPower(result);
+                var point = FatumHelps.TestPoint(fatum.Latitude, fatum.Longitude, fatum.Radio, coordList, EnumAnomalyType.Void);
+                result.RadioAproximado = point.RadioAproximado;
+                result.Power = CalcularPower(point);
             }
 
             return result;
         }
-
 
         public Anomalia GetMaxAnomalia(
             Fatum fatum,
@@ -343,12 +344,11 @@ namespace FatumCommon
             var atractor = FindMaxAttractor(fatum, anomalias);
             var vacio = FindMaxVoid(fatum, anomalias);
 
-            if (atractor != null) atractor.Power = CalcularPower(atractor);
-            if (vacio != null) vacio.Power = CalcularPower(vacio);
 
             if (atractor == null) return Finalize(fatum, coordList, vacio);
             if (vacio == null) return Finalize(fatum, coordList, atractor);
-
+            Finalize(fatum, coordList, atractor);
+            Finalize(fatum, coordList, vacio);
             // Compiten por Power — desempate por potencial cuántico absoluto
             Anomalia result;
             if (Math.Abs(atractor.Power - vacio.Power) < 0.01)
@@ -357,7 +357,7 @@ namespace FatumCommon
             else
                 result = atractor.Power >= vacio.Power ? atractor : vacio;
 
-            return Finalize(fatum, coordList, result);
+            return result;
         }
 
         private Anomalia Finalize(
@@ -366,8 +366,9 @@ namespace FatumCommon
             Anomalia a)
         {
             if (a == null) return null;
-            a.RadioAproximado = FatumHelps.CalculaRadioAproximado(
-                fatum.Latitude, fatum.Longitude, coordList, a.TipoAnomalia);
+            var point = FatumHelps.TestPoint(fatum.Latitude, fatum.Longitude, fatum.Radio, coordList, a.TipoAnomalia);
+            a.RadioAproximado = point.RadioAproximado;
+            a.Power = CalcularPower(point);
             return a;
         }
 
@@ -405,9 +406,20 @@ namespace FatumCommon
             return Math.Round(norm * 10.0, 2);
         }
 
+        private static double CalcularPower(AnomalyAnalysisResult point)
+        {
+            return point.IntensidadAnomalia;
+            //double norm = point.IntensidadAnomalia / 1.0;
+            //if (norm > 1.0) norm = 1.0;
+
+            //return Math.Round(norm * 10.0, 2);
+        }
+
+
+
         public double CalculaZScoreFinal(double z, double qz)
         {
-            double alpha = 1.0;
+            double alpha = 0.6;
 
             double Zfinal = Math.Sign(z) *
                 Math.Sqrt(z * z + alpha * qz * qz);

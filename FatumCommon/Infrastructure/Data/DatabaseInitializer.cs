@@ -37,6 +37,7 @@ CREATE TABLE IF NOT EXISTS fatums (
     NumPuntos INTEGER,
     TypeRnd INTEGER,
     CreatedAt TEXT,
+    Hmac TEXT,
     RandomData BLOB
 );";
             const string sqlAnomalias = @"
@@ -70,6 +71,7 @@ CREATE TABLE IF NOT EXISTS anomalias (
             await EnsureColumnAsync(conn, "fatums", "What3Words", "TEXT", cancellationToken);
             await EnsureColumnAsync(conn, "fatums", "GridSize", "INTEGER", cancellationToken);
             await EnsureColumnAsync(conn, "fatums", "Bandwidth", "REAL", cancellationToken);
+            await EnsureColumnAsync(conn, "fatums", "Hmac", "TEXT", cancellationToken);
 
             await EnsureColumnAsync(conn, "anomalias", "OpenLocationCode", "TEXT", cancellationToken);
             await EnsureColumnAsync(conn, "anomalias", "GeoHash", "TEXT", cancellationToken);
