@@ -176,47 +176,77 @@ namespace FatumCommon.Helps
         }
 
         public static AnomalyAnalysisResult TestPoint(
-           double lat,
-           double lon,
-           double radius,
-           IList<(double lat, double lon)> testpoints)
+            double lat,
+            double lon,
+            double radius,
+            IList<(double lat, double lon)> testpoints)
         {
             var np = new AnomalyAnalysisResult();
 
+            // ── 🛡️ Guards defensivos ──
+            if (testpoints == null || testpoints.Count == 0)
+                return np;
+            if (radius <= 0)
+                return np;
+
             int N = testpoints.Count;
 
-            // Vecinos adaptativos
-            int k = Math.Max(3, (int)Math.Sqrt(N));
+            // ── k adaptativo ──
+            //   sqrt(N)   → heurística clásica para detección de anomalías.
+            //   N^(2/3)   → óptimo MSE para estimación de densidad (d=2), más suave.
+            // Usamos sqrt(N) porque da más contraste local, que es lo que queremos
+            // para atractores/vacíos. Capeamos en [3, 200] para evitar valores
+            // absurdos si N es enorme o N=1.
+            int k = (int)Math.Sqrt(N);
+            if (k < 3) k = 3;
+            if (k > 200) k = 200;
+            if (k > N) k = N;    // no más vecinos que puntos
 
-            // Calcular distancias
-            var distancias = testpoints
-                .Select(coord => FatumHelps.GetDistance(lat, lon, coord.lat, coord.lon))
-                .ToArray();
+            // ── Distancias ──
+            var distancias = new double[N];
+            for (int i = 0; i < N; i++)
+            {
+                var c = testpoints[i];
+                distancias[i] = GetDistance(lat, lon, c.lat, c.lon);
+            }
 
-            np.DistanciaMasCercana = distancias.Min();
+            // Vecino más cercano
+            double distanciaMin = double.MaxValue;
+            for (int i = 0; i < N; i++)
+                if (distancias[i] < distanciaMin) distanciaMin = distancias[i];
+            np.DistanciaMasCercana = distanciaMin;
 
-            var distanciasOrdenadas = distancias.OrderBy(d => d).ToArray();
+            // k-ésimo vecino
+            var distanciasOrdenadas = (double[])distancias.Clone();
+            Array.Sort(distanciasOrdenadas);
 
-            // Radio basado en el k-ésimo vecino
-            np.RadioAproximado = distanciasOrdenadas[Math.Min(k, distanciasOrdenadas.Length) - 1];
+            double r_k = distanciasOrdenadas[k - 1];
 
-            int puntosCercanos = distancias.Count(d => d <= np.RadioAproximado);
+            // ── 🛡️ Colisión perfecta: r_k == 0 (puntos duplicados en el mismo sitio) ──
+            // Sin este piso, DensidadRelativa explota. 1 cm es inofensivo geográficamente.
+            if (r_k < 1e-2) r_k = 1e-2;
+            np.RadioAproximado = r_k;
 
-            // Áreas
-            double areaLocal = Math.PI * Math.Pow(np.RadioAproximado, 2);
-            double areaGlobal = Math.PI * Math.Pow(radius, 2);
+            // Cuántos caen dentro de r_k (incluye empates → puntosCercanos ≥ k)
+            int puntosCercanos = 0;
+            for (int i = 0; i < N; i++)
+                if (distancias[i] <= r_k) puntosCercanos++;
 
-            double epsilon = 1e-9;
+            // ── Áreas ──
+            double areaLocal = Math.PI * r_k * r_k;
+            double areaGlobal = Math.PI * radius * radius;
 
-            // Densidades con suavizado
+            const double epsilon = 1e-9;
+
+            // Densidad local: kNN + pseudocount del test point
+            // Densidad global: referencia uniforme sobre el disco del Fatum (sin pseudocount)
             double densidadLocal = (puntosCercanos + 1) / (areaLocal + epsilon);
-            double densidadGlobal = (N + 1) / (areaGlobal + epsilon);
+            double densidadGlobal = N / (areaGlobal + epsilon);
 
             np.DensidadRelativa = densidadLocal / densidadGlobal;
 
             return np;
         }
-
         public static double CalculaRadioAproximado(
             double lat,
             double lon,

@@ -13,8 +13,7 @@ namespace FatumCommon
     /// </summary>
     public sealed class KdeCalculator : IKdeCalculator
     {
-        private const double Epsilon = 1e-12;
-        private const double SigmaThreshold = 3.5;
+        private const double MetersPerDeg = 111_320.0;   // 1° latitud ≈ 111.32 km
 
         #region 📈 KDE
 
@@ -22,19 +21,21 @@ namespace FatumCommon
         {
             const double d = 2.0;
             if (n <= 0) return 0;
-            return Math.Pow(4.0 / (d + 2.0), 1.0 / (d + 4.0)) * Math.Pow(n, -1.0 / (d + 4.0));
+            return Math.Pow(4.0 / (d + 2.0), 1.0 / (d + 4.0))
+                 * Math.Pow(n, -1.0 / (d + 4.0));
         }
 
-
-        public (double lat, double lon, double density)[] CalculateKdeOptimized(List<(double lat, double lon)> coordList, double? bandwidth = null, int gridSize = 100)
+        public (double lat, double lon, double density)[] CalculateKdeOptimized(
+            List<(double lat, double lon)> coordList,
+            double? bandwidth = null,
+            int gridSize = 100)
         {
             int n = coordList.Count;
             if (n == 0) return Array.Empty<(double, double, double)>();
+            if (gridSize < 2) gridSize = 2;
 
-            const double d = 2.0;
             const double epsilon = 1e-8;
 
-            // Extraer coordenadas y rangos
             double[] xData = new double[n];
             double[] yData = new double[n];
             double minX = double.MaxValue, maxX = double.MinValue;
@@ -51,11 +52,9 @@ namespace FatumCommon
                 if (lon > maxY) maxY = lon;
             }
 
-            // Media
             double meanX = xData.Average();
             double meanY = yData.Average();
 
-            // Covarianza
             double covXX = 0, covXY = 0, covYY = 0;
             for (int i = 0; i < n; i++)
             {
@@ -65,9 +64,12 @@ namespace FatumCommon
                 covXY += dx * dy;
                 covYY += dy * dy;
             }
-            covXX /= (n - 1);
-            covXY /= (n - 1);
-            covYY /= (n - 1);
+            if (n > 1)
+            {
+                covXX /= (n - 1);
+                covXY /= (n - 1);
+                covYY /= (n - 1);
+            }
 
             double detCov = covXX * covYY - covXY * covXY;
             if (Math.Abs(detCov) < epsilon)
@@ -77,17 +79,12 @@ namespace FatumCommon
                 detCov = covXX * covYY - covXY * covXY;
             }
 
-            if (bandwidth == null)
-            {
-                // Bandwidth Silverman multivariante
-                bandwidth = CalculateSilvermanBandwidth(n);
-            }
+            bandwidth ??= CalculateSilvermanBandwidth(n);
 
             covXX *= bandwidth.Value * bandwidth.Value;
             covYY *= bandwidth.Value * bandwidth.Value;
             covXY *= bandwidth.Value * bandwidth.Value;
 
-            // Matriz H e inversa
             detCov = covXX * covYY - covXY * covXY;
             double invDetCov = 1.0 / detCov;
             double invH11 = covYY * invDetCov;
@@ -105,20 +102,19 @@ namespace FatumCommon
             {
                 double x = minX + i * xStep;
                 int rowIndex = i * gridSize;
-
                 for (int j = 0; j < gridSize; j++)
                 {
                     double y = minY + j * yStep;
                     double total = 0.0;
-
                     for (int k = 0; k < n; k++)
                     {
                         double dx = x - xData[k];
                         double dy = y - yData[k];
-                        double exponent = dx * dx * invH11 + 2 * dx * dy * invH12 + dy * dy * invH22;
+                        double exponent = dx * dx * invH11
+                                        + 2 * dx * dy * invH12
+                                        + dy * dy * invH22;
                         total += Math.Exp(-0.5 * exponent);
                     }
-
                     densityGrid[rowIndex + j] = (x, y, normFactor * total);
                 }
             });
@@ -126,34 +122,32 @@ namespace FatumCommon
             return densityGrid;
         }
 
-
         public int GetGridSize(double radioMetros)
         {
             if (radioMetros <= 3000) return 120;
-            else if (radioMetros <= 6000) return 160;
-            else if (radioMetros <= 10000) return 200;
-            else return 300;
+            if (radioMetros <= 6000) return 160;
+            if (radioMetros <= 10000) return 200;
+            return 300;
         }
+
         #endregion
 
         #region 🧠 Estadística
 
         public Anomalia[] CalculaEstadisticas(
-     Fatum fatum,
-     (double lat, double lon, double density)[] densityGrid)
+            Fatum fatum,
+            (double lat, double lon, double density)[] densityGrid)
         {
             double radioMax = fatum.Radio;
 
-
             int total = densityGrid.Length;
             int gridSize = (int)Math.Sqrt(total);
-
             if (gridSize * gridSize != total)
                 throw new InvalidOperationException("El densityGrid no es un grid cuadrado.");
+            if (gridSize < 3)
+                return Array.Empty<Anomalia>();
 
-            // ─────────────────────────────
-            // 1️⃣ Obtener límites en una sola pasada
-            // ─────────────────────────────
+            // ── 1️⃣ Límites en una pasada ──
             double minLat = double.MaxValue, maxLat = double.MinValue;
             double minLon = double.MaxValue, maxLon = double.MinValue;
 
@@ -166,67 +160,50 @@ namespace FatumCommon
                 if (p.lon > maxLon) maxLon = p.lon;
             }
 
-            double xStep = (maxLat - minLat) / (gridSize - 1);
-            double yStep = (maxLon - minLon) / (gridSize - 1);
+            double xStepDeg = (maxLat - minLat) / (gridSize - 1);
+            double yStepDeg = (maxLon - minLon) / (gridSize - 1);
 
-            // ─────────────────────────────
-            // 2️⃣ Potencial cuántico
-            // ─────────────────────────────
-            double[,] Q = ComputeQuantumPotentialRobust(densityGrid, xStep, yStep);
+            // ── 2️⃣ Potencial cuántico (unidades: 1/m²) ──
+            double[,] Q = ComputeQuantumPotentialRobust(densityGrid, xStepDeg, yStepDeg);
 
-            // ─────────────────────────────
-            // 3️⃣ Filtrar + acumular estadística en una sola pasada
-            // ─────────────────────────────
+            // ── 3️⃣ Filtrar por radio del Fatum ──
             var temp = new List<DensityCell>();
-
             for (int idx = 0; idx < total; idx++)
             {
                 int i = idx / gridSize;
                 int j = idx % gridSize;
-
                 if (i == 0 || j == 0 || i == gridSize - 1 || j == gridSize - 1)
                     continue;
 
                 var p = densityGrid[idx];
-
                 double dist = FatumHelps.GetDistance(
-                    fatum.Latitude, fatum.Longitude,
-                    p.lat, p.lon);
-
-                if (dist <= radioMax) temp.Add(new DensityCell(p.lat, p.lon, p.density, Q[i, j], dist));
+                    fatum.Latitude, fatum.Longitude, p.lat, p.lon);
+                if (dist <= radioMax)
+                    temp.Add(new DensityCell(p.lat, p.lon, p.density, Q[i, j], dist));
             }
 
             int n = temp.Count;
-            if (n == 0)
-                return Array.Empty<Anomalia>();
+            if (n == 0) return Array.Empty<Anomalia>();
 
-            // ─────────────────────────────
-            // 4️⃣ Estadística POBLACIONAL
-            // ─────────────────────────────
-            var valuesZ = temp.Select(x => x.Density).ToList();
-            double mediaZ = valuesZ.Average();
-            double desviacionZ = Math.Sqrt(valuesZ.Select(v => Math.Pow(v - mediaZ, 2)).Average());
+            // ── 4️⃣ Estadística poblacional (LOCAL al radio del Fatum) ──
+            var valuesDensity = temp.Select(x => x.Density).ToList();
+            double mediaDensity = valuesDensity.Average();
+            double sigmaDensity = Math.Sqrt(
+                valuesDensity.Select(v => Math.Pow(v - mediaDensity, 2)).Average());
 
             var valuesQ = temp.Select(x => x.QuantumPotential).ToList();
             double mediaQ = valuesQ.Average();
-            double desviacionQ = Math.Sqrt(valuesQ.Select(v => Math.Pow(v - mediaQ, 2)).Average());
+            double sigmaQ = Math.Sqrt(
+                valuesQ.Select(v => Math.Pow(v - mediaQ, 2)).Average());
 
-            // ─────────────────────────────
-            // 5️⃣ Construcción final
-            // ─────────────────────────────
+            // ── 5️⃣ Construcción final ──
             var resultado = new Anomalia[n];
-
             for (int k = 0; k < n; k++)
             {
                 var c = temp[k];
 
-                double z = desviacionZ > 0
-                    ? (c.Density - mediaZ) / desviacionZ
-                    : 0;
-
-                double qz = desviacionQ > 0
-                    ? (c.QuantumPotential - mediaQ) / desviacionQ
-                    : 0;
+                double z = sigmaDensity > 0 ? (c.Density - mediaDensity) / sigmaDensity : 0;
+                double qz = sigmaQ > 0 ? (c.QuantumPotential - mediaQ) / sigmaQ : 0;
 
                 resultado[k] = new Anomalia
                 {
@@ -237,16 +214,12 @@ namespace FatumCommon
                     QZScore = qz,
                     ZScoreFinal = CalculaZScoreFinal(z, qz),
                     QuantumPotential = c.QuantumPotential,
-                    TipoAnomalia = z < 0
-                        ? EnumAnomalyType.Void
-                        : EnumAnomalyType.Attractor,
+                    TipoAnomalia = z < 0 ? EnumAnomalyType.Void : EnumAnomalyType.Attractor,
                     Distancia = c.Distance
                 };
             }
-
             return resultado;
         }
-
 
         #endregion
 
@@ -256,21 +229,15 @@ namespace FatumCommon
         {
             Anomalia best = null;
             double maxScore = double.MinValue;
-
             foreach (var a in anomalias)
             {
                 if (a.ZScore <= 0.05) continue;
                 if (a.QZScore <= 0) continue;
                 if (a.Distancia > fatum.Radio) continue;
-                double score = Math.Max(0, a.ZScore);
 
-                if (score > maxScore)
-                {
-                    maxScore = score;
-                    best = a;
-                }
+                double score = a.ZScore;   // ya es > 0.05
+                if (score > maxScore) { maxScore = score; best = a; }
             }
-
             return best;
         }
 
@@ -278,24 +245,15 @@ namespace FatumCommon
         {
             Anomalia best = null;
             double maxScore = double.MinValue;
-
             foreach (var a in anomalias)
             {
                 if (a.ZScore >= -0.05) continue;
                 if (a.QZScore >= 0) continue;
                 if (a.Distancia > fatum.Radio) continue;
 
-                double score = Math.Abs(Math.Min(0, a.QZScore));
-                //double bordeFactor = 1.0 - (a.Distancia / fatum.Radio);
-                //score *= bordeFactor;
-
-                if (score > maxScore)
-                {
-                    maxScore = score;
-                    best = a;
-                }
+                double score = Math.Abs(a.QZScore);
+                if (score > maxScore) { maxScore = score; best = a; }
             }
-
             return best;
         }
 
@@ -309,11 +267,14 @@ namespace FatumCommon
 
             if (result != null)
             {
-                var point = FatumHelps.TestPoint(fatum.Latitude, fatum.Longitude, fatum.Radio, coordList, EnumAnomalyType.Attractor);
+                // ✅ FIX: posición de la ANOMALÍA, no del centro del Fatum
+                var point = FatumHelps.TestPoint(
+                    result.Latitude, result.Longitude,
+                    fatum.Radio, coordList, EnumAnomalyType.Attractor);
+
                 result.RadioAproximado = point.RadioAproximado;
                 result.Power = CalcularPower(point);
             }
-
             return result;
         }
 
@@ -327,11 +288,14 @@ namespace FatumCommon
 
             if (result != null)
             {
-                var point = FatumHelps.TestPoint(fatum.Latitude, fatum.Longitude, fatum.Radio, coordList, EnumAnomalyType.Void);
+                // ✅ FIX: posición de la ANOMALÍA, no del centro del Fatum
+                var point = FatumHelps.TestPoint(
+                    result.Latitude, result.Longitude,
+                    fatum.Radio, coordList, EnumAnomalyType.Void);
+
                 result.RadioAproximado = point.RadioAproximado;
                 result.Power = CalcularPower(point);
             }
-
             return result;
         }
 
@@ -344,20 +308,23 @@ namespace FatumCommon
             var atractor = FindMaxAttractor(fatum, anomalias);
             var vacio = FindMaxVoid(fatum, anomalias);
 
-
             if (atractor == null) return Finalize(fatum, coordList, vacio);
             if (vacio == null) return Finalize(fatum, coordList, atractor);
+
             Finalize(fatum, coordList, atractor);
             Finalize(fatum, coordList, vacio);
-            // Compiten por Power — desempate por potencial cuántico absoluto
-            Anomalia result;
-            if (Math.Abs(atractor.Power - vacio.Power) < 0.01)
-                result = Math.Abs(atractor.QuantumPotential) >= Math.Abs(vacio.QuantumPotential)
-                    ? atractor : vacio;
-            else
-                result = atractor.Power >= vacio.Power ? atractor : vacio;
 
-            return result;
+            // ✅ FIX: umbral RELATIVO (5%) en lugar de absoluto (0.01)
+            double denom = Math.Max(atractor.Power, vacio.Power);
+            bool tied = denom > 0
+                     && Math.Abs(atractor.Power - vacio.Power) / denom < 0.05;
+
+            if (tied)
+                // ✅ FIX: desempate por |QZScore| (estandarizado) — no por |QuantumPotential| crudo
+                return Math.Abs(atractor.QZScore) >= Math.Abs(vacio.QZScore)
+                    ? atractor : vacio;
+
+            return atractor.Power >= vacio.Power ? atractor : vacio;
         }
 
         private Anomalia Finalize(
@@ -366,7 +333,12 @@ namespace FatumCommon
             Anomalia a)
         {
             if (a == null) return null;
-            var point = FatumHelps.TestPoint(fatum.Latitude, fatum.Longitude, fatum.Radio, coordList, a.TipoAnomalia);
+
+            // ✅ FIX: posición de la ANOMALÍA
+            var point = FatumHelps.TestPoint(
+                a.Latitude, a.Longitude,
+                fatum.Radio, coordList, a.TipoAnomalia);
+
             a.RadioAproximado = point.RadioAproximado;
             a.Power = CalcularPower(point);
             return a;
@@ -376,21 +348,23 @@ namespace FatumCommon
             Fatum fatum,
             List<(double lat, double lon)> coordList,
             (double lat, double lon, double density)[] densityGrid,
-            EnumAnomalyType anomalyType, double? bandwidth = null, int gridSize = 100)
+            EnumAnomalyType anomalyType,
+            double? bandwidth = null,
+            int gridSize = 100)
         {
             if (anomalyType == EnumAnomalyType.Void)
                 return GetMaxVoid(fatum, coordList, densityGrid);
-
             if (anomalyType == EnumAnomalyType.Attractor)
                 return GetMaxAttractor(fatum, coordList, densityGrid);
-
             throw new ArgumentException("Invalid anomaly type");
         }
 
         public Anomalia GetFatum(
             Fatum fatum,
             List<(double lat, double lon)> coordList,
-            EnumAnomalyType anomalyType, double? bandwidth = null, int gridSize = 100)
+            EnumAnomalyType anomalyType,
+            double? bandwidth = null,
+            int gridSize = 100)
         {
             var grid = CalculateKdeOptimized(coordList, bandwidth, gridSize);
             return GetFatum(fatum, coordList, grid, anomalyType, bandwidth, gridSize);
@@ -398,102 +372,90 @@ namespace FatumCommon
 
         #endregion
 
-        private static double CalcularPower(Anomalia a)
-        {
-            double norm = Math.Abs(a.ZScore) / SigmaThreshold;
-            if (norm > 1.0) norm = 1.0;
+        #region 🔧 Helpers
 
-            return Math.Round(norm * 10.0, 2);
-        }
-
+        /// <summary>
+        /// Densidad relativa en el punto de la anomalía (ratio local/global).
+        /// Attractor → DR     (＞1 si cluster).
+        /// Void      → 1/DR   (＞1 si vacío).
+        /// </summary>
         private static double CalcularPower(AnomalyAnalysisResult point)
-        {
-            return point.IntensidadAnomalia;
-            //double norm = point.IntensidadAnomalia / 1.0;
-            //if (norm > 1.0) norm = 1.0;
+            => point.IntensidadAnomalia;
 
-            //return Math.Round(norm * 10.0, 2);
-        }
-
-
-
+        /// <summary>
+        /// Combina Z y QZ con signo. Si z = 0, hereda el signo de qz
+        /// para no perder la información del potencial cuántico.
+        /// </summary>
         public double CalculaZScoreFinal(double z, double qz)
         {
-            double alpha = 0.6;
-
-            double Zfinal = Math.Sign(z) *
-                Math.Sqrt(z * z + alpha * qz * qz);
-
-            return Zfinal;
+            const double alpha = 0.6;
+            double sign = Math.Sign(z);
+            if (sign == 0) sign = Math.Sign(qz);
+            if (sign == 0) return 0;
+            return sign * Math.Sqrt(z * z + alpha * qz * qz);
         }
 
+        /// <summary>
+        /// Potencial cuántico de Bohm — unidades SI: 1/m².
+        /// Laplaciano con métrica esférica local (cos(lat) en el eje longitud).
+        /// </summary>
         private static double[,] ComputeQuantumPotentialRobust(
             (double lat, double lon, double density)[] densityGrid,
-            double xStep,
-            double yStep)
+            double xStepDeg,
+            double yStepDeg)
         {
             int total = densityGrid.Length;
             int gridSize = (int)Math.Sqrt(total);
-
             if (gridSize * gridSize != total)
                 throw new InvalidOperationException("densityGrid no es un grid cuadrado.");
+            if (gridSize < 3 || xStepDeg <= 0 || yStepDeg <= 0)
+                return new double[Math.Max(gridSize, 0), Math.Max(gridSize, 0)];
 
-            int nx = gridSize;
-            int ny = gridSize;
-
+            int nx = gridSize, ny = gridSize;
             double[,] Q = new double[nx, ny];
             double[,] R = new double[nx, ny];
 
-            const double rhoFloor = 1e-10;
-            const double rFloor = 1e-12; // evita explosión numérica
+            const double rhoFloor = 1e-10;   // R_min = sqrt(1e-10) = 1e-5 → división segura
 
-            double invXStep2 = 1.0 / (xStep * xStep);
-            double invYStep2 = 1.0 / (yStep * yStep);
-
-            // ─────────────────────────────────────────────
-            // 1️⃣ Construir R = sqrt(ρ)
-            // ─────────────────────────────────────────────
+            // 1️⃣ R = sqrt(ρ)  (amplitud, sin unidades)
             Parallel.For(0, nx, i =>
             {
                 int rowOffset = i * gridSize;
-
                 for (int j = 0; j < ny; j++)
                 {
                     double rho = densityGrid[rowOffset + j].density;
-
-                    if (rho < rhoFloor)
-                        rho = rhoFloor;
-
+                    if (rho < rhoFloor) rho = rhoFloor;
                     R[i, j] = Math.Sqrt(rho);
                 }
             });
 
-            // ─────────────────────────────────────────────
-            // 2️⃣ Calcular Q (SIN reflectivo artificial)
-            //     Solo interior real (más estable)
-            // ─────────────────────────────────────────────
+            // 2️⃣ Laplaciano (metros) con anisotropía lat/lon
             Parallel.For(1, nx - 1, i =>
             {
+                double latDeg = densityGrid[i * gridSize].lat;
+                double cosLat = Math.Cos(latDeg * Math.PI / 180.0);
+                if (cosLat < 1e-6) cosLat = 1e-6;   // protección en los polos
+
+                double xStepM = xStepDeg * MetersPerDeg;
+                double yStepM = yStepDeg * MetersPerDeg * cosLat;
+
+                double invXStep2 = 1.0 / (xStepM * xStepM);
+                double invYStep2 = 1.0 / (yStepM * yStepM);
+
                 for (int j = 1; j < ny - 1; j++)
                 {
                     double center = R[i, j];
-
-                    if (center < rFloor)
-                    {
-                        Q[i, j] = 0;
-                        continue;
-                    }
-
                     double lap =
                         (R[i + 1, j] - 2.0 * center + R[i - 1, j]) * invXStep2 +
                         (R[i, j + 1] - 2.0 * center + R[i, j - 1]) * invYStep2;
 
-                    Q[i, j] = -lap / center;
+                    Q[i, j] = -lap / center;    // 1/m²
                 }
             });
 
-            // Bordes = 0 (más estable que reflectivo)
             return Q;
         }
+
+        #endregion
     }
 }
