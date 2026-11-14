@@ -14,7 +14,19 @@ namespace FatumCommon
     public sealed class KdeCalculator : IKdeCalculator
     {
         private const double MetersPerDeg = 111_320.0;   // 1° latitud ≈ 111.32 km
+                                                         // Piso de disponibilidad: por debajo no se devuelve destino.
+                                                         // Calibrado para que en ruido puro ambas busquedas devuelvan ~100% (1 intento).
+        /// <summary>
+        /// Umbral del atractor sobre ZScore. El score de FindMaxAttractor es Z, no QZ.
+        /// Calibrado para ~98% de disponibilidad (1.03 intentos) en disco uniforme, N=1024, G=120.
+        /// </summary>
+        private const double ZAttractorThreshold = 1.4;
 
+        /// <summary>
+        /// Umbral del vacio sobre |QZScore|. Calibrado para ~95% de disponibilidad
+        /// (1.05 intentos) en disco uniforme, N=1024, G=120. Recalibrar si cambian N o G.
+        /// </summary>
+        private const double QzVoidThreshold = 1.5;
         #region 📈 KDE
 
         public double CalculateSilvermanBandwidth(int n)
@@ -229,13 +241,14 @@ namespace FatumCommon
         {
             Anomalia best = null;
             double maxScore = double.MinValue;
+
             foreach (var a in anomalias)
             {
-                if (a.ZScore <= 0.05) continue;
-                if (a.QZScore <= 0) continue;
+                if (a.ZScore < ZAttractorThreshold) continue;   // antes: <= 0.05
+                if (a.QZScore <= 0) continue;                   // puerta de coherencia, se mantiene
                 if (a.Distancia > fatum.Radio) continue;
 
-                double score = a.ZScore;   // ya es > 0.05
+                double score = a.ZScore;
                 if (score > maxScore) { maxScore = score; best = a; }
             }
             return best;
@@ -245,6 +258,7 @@ namespace FatumCommon
         {
             Anomalia best = null;
             double maxScore = double.MinValue;
+
             foreach (var a in anomalias)
             {
                 if (a.ZScore >= -0.05) continue;
@@ -252,6 +266,7 @@ namespace FatumCommon
                 if (a.Distancia > fatum.Radio) continue;
 
                 double score = Math.Abs(a.QZScore);
+                if (score < QzVoidThreshold) continue;          // antes: 3.0
                 if (score > maxScore) { maxScore = score; best = a; }
             }
             return best;
@@ -267,14 +282,15 @@ namespace FatumCommon
 
             if (result != null)
             {
-                // ✅ FIX: posición de la ANOMALÍA, no del centro del Fatum
                 var point = FatumHelps.TestPoint(
                     result.Latitude, result.Longitude,
-                    fatum.Radio, coordList, EnumAnomalyType.Attractor);
+                    fatum.Radio, coordList, EnumAnomalyType.Attractor,
+                    fatum.Latitude, fatum.Longitude);
 
                 result.RadioAproximado = point.RadioAproximado;
                 result.Power = CalcularPower(point);
             }
+
             return result;
         }
 
@@ -288,14 +304,15 @@ namespace FatumCommon
 
             if (result != null)
             {
-                // ✅ FIX: posición de la ANOMALÍA, no del centro del Fatum
                 var point = FatumHelps.TestPoint(
                     result.Latitude, result.Longitude,
-                    fatum.Radio, coordList, EnumAnomalyType.Void);
+                    fatum.Radio, coordList, EnumAnomalyType.Void,
+                    fatum.Latitude, fatum.Longitude);
 
                 result.RadioAproximado = point.RadioAproximado;
                 result.Power = CalcularPower(point);
             }
+
             return result;
         }
 
@@ -305,6 +322,7 @@ namespace FatumCommon
             (double lat, double lon, double density)[] densityGrid)
         {
             var anomalias = CalculaEstadisticas(fatum, densityGrid);
+
             var atractor = FindMaxAttractor(fatum, anomalias);
             var vacio = FindMaxVoid(fatum, anomalias);
 
@@ -314,13 +332,11 @@ namespace FatumCommon
             Finalize(fatum, coordList, atractor);
             Finalize(fatum, coordList, vacio);
 
-            // ✅ FIX: umbral RELATIVO (5%) en lugar de absoluto (0.01)
             double denom = Math.Max(atractor.Power, vacio.Power);
             bool tied = denom > 0
-                     && Math.Abs(atractor.Power - vacio.Power) / denom < 0.05;
+                && Math.Abs(atractor.Power - vacio.Power) / denom < 0.05;
 
             if (tied)
-                // ✅ FIX: desempate por |QZScore| (estandarizado) — no por |QuantumPotential| crudo
                 return Math.Abs(atractor.QZScore) >= Math.Abs(vacio.QZScore)
                     ? atractor : vacio;
 
@@ -334,13 +350,14 @@ namespace FatumCommon
         {
             if (a == null) return null;
 
-            // ✅ FIX: posición de la ANOMALÍA
             var point = FatumHelps.TestPoint(
                 a.Latitude, a.Longitude,
-                fatum.Radio, coordList, a.TipoAnomalia);
+                fatum.Radio, coordList, a.TipoAnomalia,
+                fatum.Latitude, fatum.Longitude);
 
             a.RadioAproximado = point.RadioAproximado;
             a.Power = CalcularPower(point);
+
             return a;
         }
 

@@ -6,40 +6,42 @@ namespace FatumCommon.Extensions
     public static class EnumerableExtensions
     {
         /// <summary>
-        /// Devuelve un iterable en pares de elementos consecutivos.
-        /// Por ejemplo, para [1, 2, 3, 4], producirá (1, 2), (3, 4).
+        /// Devuelve pares de elementos consecutivos no solapados.
+        /// Para [1, 2, 3, 4] produce (1, 2), (3, 4).
         /// </summary>
-        /// <typeparam name="T">El tipo de los elementos en el iterable.</typeparam>
-        /// <param name="source">El IEnumerable de origen.</param>
-        /// <returns>Un IEnumerable de tuplas que contienen pares de elementos.</returns>
         public static IEnumerable<(T First, T Second)> Pairwise<T>(this IEnumerable<T> source)
+            => Pairwise(source, false);
+
+        /// <summary>
+        /// Igual que Pairwise, pero si <paramref name="throwOnOdd"/> es true lanza
+        /// excepcion cuando el numero de elementos es impar, en lugar de descartar
+        /// el ultimo en silencio.
+        /// </summary>
+        public static IEnumerable<(T First, T Second)> Pairwise<T>(
+            this IEnumerable<T> source,
+            bool throwOnOdd)
         {
-            // Si la fuente es nula, lanza una excepción.
             if (source == null)
-            {
                 throw new ArgumentNullException(nameof(source));
-            }
 
-            // Obtiene un enumerador de la fuente.
-            using (IEnumerator<T> enumerator = source.GetEnumerator())
+            using IEnumerator<T> enumerator = source.GetEnumerator();
+
+            while (enumerator.MoveNext())
             {
-                // Mientras haya un siguiente elemento (el "primero" del par)
-                while (enumerator.MoveNext())
-                {
-                    T first = enumerator.Current; // El primer elemento del par
+                T first = enumerator.Current;
 
-                    // Intenta mover al siguiente elemento (el "segundo" del par)
-                    if (enumerator.MoveNext())
-                    {
-                        T second = enumerator.Current; // El segundo elemento del par
-                        yield return (first, second); // Devuelve el par
-                    }
-                    else
-                    {
-                        // Si no hay un segundo elemento, significa que el número de elementos es impar
-                        // y el último elemento no tiene un par. En este caso, simplemente terminamos.
-                        yield break;
-                    }
+                if (enumerator.MoveNext())
+                {
+                    yield return (first, enumerator.Current);
+                }
+                else
+                {
+                    if (throwOnOdd)
+                        throw new ArgumentException(
+                            "El numero de elementos es impar: el ultimo no tiene par.",
+                            nameof(source));
+
+                    yield break;
                 }
             }
         }
