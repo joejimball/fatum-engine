@@ -21,11 +21,11 @@
         <div class="card-body">
             <h5 class="card-title">@L.GetString("Main.SearchType")</h5>
             <div class="btn-group w-100" role="group">
-                <input type="radio" class="btn-check" name="tipo" id="tipoAtractor" checked @onchange="@(() => SetTipo(EnumAnomalyType.Attractor))" />
+                <input type="radio" class="btn-check" name="tipo" id="tipoAtractor" @onchange="@(() => SetTipo(EnumAnomalyType.Attractor))" />
                 <label class="btn btn-outline-primary" for="tipoAtractor">@L.GetString("Main.Attractor")</label>
                 <input type="radio" class="btn-check" name="tipo" id="tipoVacio" @onchange="@(() => SetTipo(EnumAnomalyType.Void))" />
                 <label class="btn btn-outline-primary" for="tipoVacio">@L.GetString("Main.Void")</label>
-                <input type="radio" class="btn-check" name="tipo" id="tipoAnomalia"  @onchange="@(() => SetTipo(EnumAnomalyType.None))" />
+                <input type="radio" class="btn-check" name="tipo" id="tipoAnomalia" checked @onchange="@(() => SetTipo(EnumAnomalyType.None))" />
                 <label class="btn btn-outline-primary" for="tipoAnomalia">@L.GetString("Main.Power")</label>
             </div>
         </div>
