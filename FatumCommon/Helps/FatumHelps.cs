@@ -302,12 +302,7 @@ namespace FatumCommon.Helps
             if (radius <= 0) return np;
 
             int N = testpoints.Count;
-
             int k = (int)Math.Sqrt(N);
-            if (k < 3) k = 3;
-            if (k > 200) k = 200;
-            if (k > N) k = N;
-
             var distancias = new double[N];
             for (int i = 0; i < N; i++)
             {
@@ -360,7 +355,15 @@ namespace FatumCommon.Helps
             EnumAnomalyType anomalyType)
         {
             int minPoints = anomalyType == EnumAnomalyType.Void ? 3 : 12;
+            return CalculaRadioAproximado(lat,lon,testpoints,minPoints);
+        }
 
+        public static double CalculaRadioAproximado(
+            double lat,
+            double lon,
+            IList<(double lat, double lon)> testpoints,
+            int minPoints = 3)
+        {
             if (testpoints == null || !testpoints.Any()) return 0;
 
             var distancias = testpoints

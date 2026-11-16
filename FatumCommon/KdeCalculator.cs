@@ -27,6 +27,22 @@ namespace FatumCommon
         /// (1.05 intentos) en disco uniforme, N=1024, G=120. Recalibrar si cambian N o G.
         /// </summary>
         private const double QzVoidThreshold = 1.5;
+
+
+        /// <summary>
+        /// Radio de escala interna del kernel: h = RadioEscalaFactor * R.
+        /// Referencia del acuerdo de diseño; el ancho de banda lo fija el llamador
+        /// al construir el KDE. No participa en el radio mostrado al usuario.
+        /// </summary>
+        private const double RadioEscalaFactor = 0.1575;
+
+        /// <summary>
+        /// P95 medidos en ruido uniforme (N=1024, G=100) para normalizar scores.
+        /// </summary>
+        private const double ZP95 = 2.45;
+        private const double QzP95 = 3.20;
+        private const double PowerP95 = 2.35;
+
         #region 📈 KDE
 
         public double CalculateSilvermanBandwidth(int n)
@@ -136,10 +152,7 @@ namespace FatumCommon
 
         public int GetGridSize(double radioMetros)
         {
-            if (radioMetros <= 3000) return 120;
-            if (radioMetros <= 6000) return 160;
-            if (radioMetros <= 10000) return 200;
-            return 300;
+            return 100;
         }
 
         #endregion
@@ -151,15 +164,15 @@ namespace FatumCommon
             (double lat, double lon, double density)[] densityGrid)
         {
             double radioMax = fatum.Radio;
-
             int total = densityGrid.Length;
             int gridSize = (int)Math.Sqrt(total);
+
             if (gridSize * gridSize != total)
                 throw new InvalidOperationException("El densityGrid no es un grid cuadrado.");
+
             if (gridSize < 3)
                 return Array.Empty<Anomalia>();
 
-            // ── 1️⃣ Límites en una pasada ──
             double minLat = double.MaxValue, maxLat = double.MinValue;
             double minLon = double.MaxValue, maxLon = double.MinValue;
 
@@ -175,29 +188,56 @@ namespace FatumCommon
             double xStepDeg = (maxLat - minLat) / (gridSize - 1);
             double yStepDeg = (maxLon - minLon) / (gridSize - 1);
 
-            // ── 2️⃣ Potencial cuántico (unidades: 1/m²) ──
-            double[,] Q = ComputeQuantumPotentialRobust(densityGrid, xStepDeg, yStepDeg);
+            double[,] Q = ComputeQuantumPotentialRobust(
+                densityGrid, xStepDeg, yStepDeg);
 
-            // ── 3️⃣ Filtrar por radio del Fatum ──
+            var dentro = new bool[total];
+
+            for (int idx = 0; idx < total; idx++)
+            {
+                var p = densityGrid[idx];
+                dentro[idx] = FatumHelps.GetDistance(
+                    fatum.Latitude,
+                    fatum.Longitude,
+                    p.lat,
+                    p.lon) <= radioMax;
+            }
+
             var temp = new List<DensityCell>();
+
             for (int idx = 0; idx < total; idx++)
             {
                 int i = idx / gridSize;
                 int j = idx % gridSize;
+
                 if (i == 0 || j == 0 || i == gridSize - 1 || j == gridSize - 1)
+                    continue;
+
+                if (!dentro[idx])
+                    continue;
+
+                // El centro y sus cuatro vecinos deben quedar dentro del fatum.
+                if (!dentro[idx - gridSize] ||
+                    !dentro[idx + gridSize] ||
+                    !dentro[idx - 1] ||
+                    !dentro[idx + 1])
                     continue;
 
                 var p = densityGrid[idx];
                 double dist = FatumHelps.GetDistance(
-                    fatum.Latitude, fatum.Longitude, p.lat, p.lon);
-                if (dist <= radioMax)
-                    temp.Add(new DensityCell(p.lat, p.lon, p.density, Q[i, j], dist));
+                    fatum.Latitude,
+                    fatum.Longitude,
+                    p.lat,
+                    p.lon);
+
+                temp.Add(new DensityCell(
+                    p.lat, p.lon, p.density, Q[i, j], dist));
             }
 
             int n = temp.Count;
-            if (n == 0) return Array.Empty<Anomalia>();
+            if (n == 0)
+                return Array.Empty<Anomalia>();
 
-            // ── 4️⃣ Estadística poblacional (LOCAL al radio del Fatum) ──
             var valuesDensity = temp.Select(x => x.Density).ToList();
             double mediaDensity = valuesDensity.Average();
             double sigmaDensity = Math.Sqrt(
@@ -208,14 +248,19 @@ namespace FatumCommon
             double sigmaQ = Math.Sqrt(
                 valuesQ.Select(v => Math.Pow(v - mediaQ, 2)).Average());
 
-            // ── 5️⃣ Construcción final ──
             var resultado = new Anomalia[n];
+
             for (int k = 0; k < n; k++)
             {
                 var c = temp[k];
 
-                double z = sigmaDensity > 0 ? (c.Density - mediaDensity) / sigmaDensity : 0;
-                double qz = sigmaQ > 0 ? (c.QuantumPotential - mediaQ) / sigmaQ : 0;
+                double z = sigmaDensity > 0
+                    ? (c.Density - mediaDensity) / sigmaDensity
+                    : 0;
+
+                double qz = sigmaQ > 0
+                    ? (c.QuantumPotential - mediaQ) / sigmaQ
+                    : 0;
 
                 resultado[k] = new Anomalia
                 {
@@ -226,16 +271,21 @@ namespace FatumCommon
                     QZScore = qz,
                     ZScoreFinal = CalculaZScoreFinal(z, qz),
                     QuantumPotential = c.QuantumPotential,
-                    TipoAnomalia = z < 0 ? EnumAnomalyType.Void : EnumAnomalyType.Attractor,
+                    TipoAnomalia = z < 0
+                        ? EnumAnomalyType.Void
+                        : EnumAnomalyType.Attractor,
                     Distancia = c.Distance
                 };
             }
+
             return resultado;
         }
+
 
         #endregion
 
         #region 🎯 Selección
+
 
         public Anomalia FindMaxAttractor(Fatum fatum, IList<Anomalia> anomalias)
         {
@@ -277,21 +327,12 @@ namespace FatumCommon
             IList<(double lat, double lon)> coordList,
             (double lat, double lon, double density)[] densityGrid)
         {
+            // coordList ya no se usa: el radio aproximado es fijo y el power sale
+            // de Z y QZ. Se conserva la firma por compatibilidad con IKdeCalculator.
             var anomalias = CalculaEstadisticas(fatum, densityGrid);
             var result = FindMaxAttractor(fatum, anomalias);
 
-            if (result != null)
-            {
-                var point = FatumHelps.TestPoint(
-                    result.Latitude, result.Longitude,
-                    fatum.Radio, coordList, EnumAnomalyType.Attractor,
-                    fatum.Latitude, fatum.Longitude);
-
-                result.RadioAproximado = point.RadioAproximado;
-                result.Power = CalcularPower(point);
-            }
-
-            return result;
+            return Finalize(result, coordList);
         }
 
         public Anomalia GetMaxVoid(
@@ -302,18 +343,7 @@ namespace FatumCommon
             var anomalias = CalculaEstadisticas(fatum, densityGrid);
             var result = FindMaxVoid(fatum, anomalias);
 
-            if (result != null)
-            {
-                var point = FatumHelps.TestPoint(
-                    result.Latitude, result.Longitude,
-                    fatum.Radio, coordList, EnumAnomalyType.Void,
-                    fatum.Latitude, fatum.Longitude);
-
-                result.RadioAproximado = point.RadioAproximado;
-                result.Power = CalcularPower(point);
-            }
-
-            return result;
+            return Finalize(result, coordList);
         }
 
         public Anomalia GetMaxAnomalia(
@@ -326,37 +356,28 @@ namespace FatumCommon
             var atractor = FindMaxAttractor(fatum, anomalias);
             var vacio = FindMaxVoid(fatum, anomalias);
 
-            if (atractor == null) return Finalize(fatum, coordList, vacio);
-            if (vacio == null) return Finalize(fatum, coordList, atractor);
+            if (atractor == null) return Finalize(vacio, coordList);
+            if (vacio == null) return Finalize(atractor, coordList);
 
-            Finalize(fatum, coordList, atractor);
-            Finalize(fatum, coordList, vacio);
+            Finalize(atractor, coordList);
+            Finalize(vacio, coordList);
 
-            double denom = Math.Max(atractor.Power, vacio.Power);
-            bool tied = denom > 0
-                && Math.Abs(atractor.Power - vacio.Power) / denom < 0.05;
-
-            if (tied)
-                return Math.Abs(atractor.QZScore) >= Math.Abs(vacio.QZScore)
-                    ? atractor : vacio;
-
-            return atractor.Power >= vacio.Power ? atractor : vacio;
+            // Selección entre tipos SOLO por score calibrado: cada tipo
+            // normalizado por su propio p95. Power es simétrica (50/50 en
+            // ruido uniforme) y no sirve para comparar tipos.
+            return ScoreCalibrado(atractor) >= ScoreCalibrado(vacio)
+                ? atractor
+                : vacio;
         }
 
-        private Anomalia Finalize(
-            Fatum fatum,
-            IList<(double lat, double lon)> coordList,
-            Anomalia a)
+        private Anomalia Finalize(Anomalia a, IList<(double lat, double lon)> coordList)
         {
             if (a == null) return null;
 
-            var point = FatumHelps.TestPoint(
-                a.Latitude, a.Longitude,
-                fatum.Radio, coordList, a.TipoAnomalia,
-                fatum.Latitude, fatum.Longitude);
-
-            a.RadioAproximado = point.RadioAproximado;
-            a.Power = CalcularPower(point);
+            // Radio de presentación fijo: 100 m siempre, sin importar el radio
+            // de búsqueda. La escala interna del kernel sigue siendo 0.1575·R.
+            a.RadioAproximado = FatumHelps.CalculaRadioAproximado(a.Latitude,a.Longitude,coordList);
+            a.Power = CalcularPower(a.ZScore, a.QZScore);
 
             return a;
         }
@@ -392,12 +413,21 @@ namespace FatumCommon
         #region 🔧 Helpers
 
         /// <summary>
-        /// Densidad relativa en el punto de la anomalía (ratio local/global).
-        /// Attractor → DR     (＞1 si cluster).
-        /// Void      → 1/DR   (＞1 si vacío).
+        /// Power = |Z·QZ| normalizado por su p95 (2.35) medido en ruido uniforme.
+        /// Solo para magnitud y ranking dentro de un mismo tipo; es simétrica
+        /// entre atractor y vacío, así que NO debe usarse para elegir entre tipos.
         /// </summary>
-        private static double CalcularPower(AnomalyAnalysisResult point)
-            => point.IntensidadAnomalia;
+        public static double CalcularPower(double z, double qz)
+            => Math.Abs(z * qz) / PowerP95;
+
+        /// <summary>
+        /// Score calibrado para comparar tipos: atractor → Z/ZP95,
+        /// vacío → |QZ|/QzP95. Cada tipo contra su propio p95.
+        /// </summary>
+        public static double ScoreCalibrado(Anomalia a)
+            => a.TipoAnomalia == EnumAnomalyType.Void
+                ? Math.Abs(a.QZScore) / QzP95
+                : a.ZScore / ZP95;
 
         /// <summary>
         /// Combina Z y QZ con signo. Si z = 0, hereda el signo de qz

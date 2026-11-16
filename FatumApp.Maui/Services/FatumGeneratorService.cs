@@ -206,10 +206,11 @@ public sealed class FatumGeneratorService : IFatumGeneratorService
 
     public int CalcularPuntosOptimos(int radiusMeters)
     {
-        if (radiusMeters <= 1000) return 1024;
-        else if (radiusMeters <= 2000) return 4096;
-        else if (radiusMeters <= 7000) return 5120;
-        else return 10240;
+        //if (radiusMeters <= 1000) return 1024;
+        //else if (radiusMeters <= 2000) return 4096;
+        //else if (radiusMeters <= 7000) return 5120;
+        //else return 10240;
+        return 1024;
     }
 }
 
